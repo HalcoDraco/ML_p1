@@ -3,8 +3,9 @@ import numpy as np
 from utils import (
     compute_gradient_linreg,
     calculate_mse,
-    calculate_mae,
     batch_iter,
+    calculate_logistic_gradient,
+    calculate_logistic_loss,
 )
 
 def mean_squared_error_gd(y, tx, initial_w, max_iters, gamma):
@@ -19,10 +20,9 @@ def mean_squared_error_gd(y, tx, initial_w, max_iters, gamma):
 
     Returns:
         losses: a list of length max_iters containing the loss value (scalar) for each iteration of GD
-        ws: a list of length max_iters containing the model parameters as numpy arrays of shape (2, ), for each iteration of GD
+        w: final model parameters as a numpy array of shape (P, )
     """
-    # define parameters to store w and loss
-    ws = [initial_w]
+    # initialize w and losses
     losses = []
     w = initial_w
     for n_iter in range(max_iters):
@@ -31,8 +31,7 @@ def mean_squared_error_gd(y, tx, initial_w, max_iters, gamma):
         loss = calculate_mse(err)
         # update w by gradient descent
         w = w - gamma * grad
-        # store w and loss
-        ws.append(w)
+        # store loss
         losses.append(loss)
         print(
             "GD iter. {bi}/{ti}: loss={l}, w0={w0}, w1={w1}".format(
@@ -40,7 +39,7 @@ def mean_squared_error_gd(y, tx, initial_w, max_iters, gamma):
             )
         )
 
-    return losses, ws
+    return losses, w
 
 
 def mean_squared_error_sgd(y, tx, initial_w, batch_size, max_iters, gamma):
@@ -56,11 +55,10 @@ def mean_squared_error_sgd(y, tx, initial_w, batch_size, max_iters, gamma):
 
     Returns:
         losses: a list of length max_iters containing the loss value (scalar) for each iteration of SGD
-        ws: a list of length max_iters containing the model parameters as numpy arrays of shape (2, ), for each iteration of SGD
+        w: final model parameters as a numpy array of shape (P, )
     """
 
-    # Define parameters to store w and loss
-    ws = [initial_w]
+    # Initialize w and losses
     losses = []
     w = initial_w
 
@@ -74,8 +72,7 @@ def mean_squared_error_sgd(y, tx, initial_w, batch_size, max_iters, gamma):
             w = w - gamma * grad
             # calculate loss
             loss = calculate_mse(y, tx, w)
-            # store w and loss
-            ws.append(w)
+            # store loss
             losses.append(loss)
 
         print(
@@ -83,7 +80,7 @@ def mean_squared_error_sgd(y, tx, initial_w, batch_size, max_iters, gamma):
                 bi=n_iter, ti=max_iters - 1, l=loss, w0=w[0], w1=w[1]
             )
         )
-    return losses, ws
+    return losses, w
 
 def least_squares(y, tx):
     """Calculate the least squares solution.
@@ -127,3 +124,61 @@ def ridge_regression(y, tx, lambda_):
     b = tx.T.dot(y)
     return np.linalg.solve(a, b)
 
+def logistic_regression(y, tx, initial_w, max_iters, gamma):
+    """Logistic regression using gradient descent for labels in {0, 1}.
+
+    Args:
+        y: shape=(N, )
+        tx: shape=(N,P)
+        initial_w: shape=(P, ). The initial guess for the model parameters
+        max_iters: a scalar denoting the total number of iterations of GD
+        gamma: a scalar denoting the stepsize
+
+    Returns:
+        w: final model parameters as a numpy array of shape (P, )
+        loss: logistic loss at the final w
+    """
+    w = initial_w
+    loss = calculate_logistic_loss(y, tx, w)
+    for n_iter in range(max_iters):
+        # compute gradient
+        grad = calculate_logistic_gradient(y, tx, w)
+        # update w by gradient descent
+        w = w - gamma * grad
+        loss = calculate_logistic_loss(y, tx, w)
+        print(
+            "GD iter. {bi}/{ti}: loss={l}, w0={w0}, w1={w1}".format(
+                bi=n_iter, ti=max_iters - 1, l=loss, w0=w[0], w1=w[1]
+            )
+        )
+    return w, np.float64(loss)
+
+def reg_logistic_regression(y, tx, lambda_, initial_w, max_iters, gamma):
+    """Regularized logistic regression using gradient descent for labels in {0, 1}.
+
+    Args:
+        y: shape=(N, )
+        tx: shape=(N,P)
+        lambda_: a scalar denoting the L2 regularization strength
+        initial_w: shape=(P, ). The initial guess for the model parameters
+        max_iters: a scalar denoting the total number of iterations of GD
+        gamma: a scalar denoting the stepsize
+
+    Returns:
+        w: final model parameters as a numpy array of shape (P, )
+        loss: logistic loss at the final w
+    """
+    w = initial_w
+    loss = calculate_logistic_loss(y, tx, w)
+    for n_iter in range(max_iters):
+        # compute gradient
+        grad = calculate_logistic_gradient(y, tx, w) + 2 * lambda_ * w
+        # update w by gradient descent
+        w = w - gamma * grad
+        loss = calculate_logistic_loss(y, tx, w)
+        print(
+            "GD iter. {bi}/{ti}: loss={l}, w0={w0}, w1={w1}".format(
+                bi=n_iter, ti=max_iters - 1, l=loss, w0=w[0], w1=w[1]
+            )
+        )
+    return w, np.float64(loss)
