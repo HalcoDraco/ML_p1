@@ -1,2 +1,15 @@
-/data/*.csv
+.venv/
+__pycache__/
+.ipynb_checkpoints/
+.pytest_cache/
+github_workdir/
+data/raw/*.csv
+data/processed/
+outputs/
+report/*.aux
+report/*.bbl
+report/*.blg
+report/*.log
+report/*.out
+report/*.synctex.gz
 .DS_Store
