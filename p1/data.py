@@ -1,4 +1,5 @@
 import shutil
+import warnings
 import zipfile
 from dataclasses import dataclass
 from pathlib import Path
@@ -6,7 +7,7 @@ from pathlib import Path
 import numpy as np
 
 import helpers
-from p1.paths import RAW_CACHE, RAW_DIR, RAW_ZIP
+from p1.paths import CLEAN_DATA, CLEANING_RULES, RAW_CACHE, RAW_DIR, RAW_ZIP
 
 RAW_CSVS = ("x_train.csv", "y_train.csv", "x_test.csv")
 
@@ -39,25 +40,16 @@ def load_raw() -> Dataset:
         )
         with open(RAW_DIR / "x_train.csv") as f:
             feature_names = f.readline().strip().split(",")[1:]  # drop "Id"
-        RAW_CACHE.parent.mkdir(parents=True, exist_ok=True)
-        np.savez(
-            RAW_CACHE,
+        raw = Dataset(
             x_train=x_train,
             y_train=(y_train == 1).astype(int),  # {-1, 1} -> {0, 1}
             x_test=x_test,
             train_ids=train_ids,
             test_ids=test_ids,
-            feature_names=np.array(feature_names),
+            feature_names=feature_names,
         )
-    with np.load(RAW_CACHE) as f:
-        return Dataset(
-            x_train=f["x_train"],
-            y_train=f["y_train"],
-            x_test=f["x_test"],
-            train_ids=f["train_ids"],
-            test_ids=f["test_ids"],
-            feature_names=f["feature_names"].tolist(),
-        )
+        save_dataset(raw, RAW_CACHE)
+    return _read_dataset(RAW_CACHE)
 
 
 def _extract_raw_csvs() -> None:
@@ -84,7 +76,32 @@ def load_clean() -> Dataset:
     Raises:
         FileNotFoundError: If the clean dataset has not been built yet.
     """
-    pass
+    if not CLEAN_DATA.exists():
+        raise FileNotFoundError(
+            f"{CLEAN_DATA} is missing: build it with notebooks/02_cleaning.ipynb "
+            "or p1.cleaning.build_clean_dataset()."
+        )
+    if CLEANING_RULES.stat().st_mtime > CLEAN_DATA.stat().st_mtime:
+        warnings.warn(
+            "p1/cleaning.py changed after the clean dataset was written: rebuild it "
+            "with p1.cleaning.build_clean_dataset().",
+            stacklevel=2,
+        )
+    return _read_dataset(CLEAN_DATA)
+
+
+def save_dataset(ds: Dataset, path: Path) -> None:
+    """Save a dataset as an uncompressed `.npz` file, which loads in a second."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    np.savez(path, **vars(ds))
+
+
+def _read_dataset(path: Path) -> Dataset:
+    """Read a dataset saved by `save_dataset`."""
+    with np.load(path) as f:
+        fields = {name: f[name] for name in f.files}
+    fields["feature_names"] = fields["feature_names"].tolist()
+    return Dataset(**fields)
 
 
 def write_submission(ids: np.ndarray, y_pred: np.ndarray, path: Path) -> None:
@@ -95,4 +112,5 @@ def write_submission(ids: np.ndarray, y_pred: np.ndarray, path: Path) -> None:
         y_pred: Predicted labels in {0, 1}, shape (N,).
         path: CSV file to write.
     """
-    pass
+    path.parent.mkdir(parents=True, exist_ok=True)
+    helpers.create_csv_submission(ids, 2 * y_pred - 1, str(path))

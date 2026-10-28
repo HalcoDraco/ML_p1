@@ -56,7 +56,8 @@ A NaN usually means the question did not apply. Positive rate when NaN vs when a
 | `POORHLTH` | 49% | 6.2% | 11.3% | `PHYSHLTH` = `MENTHLTH` = 88 (100%) → the value is 0 |
 | `DIABAGE2` | 87% | 6.9% | 22.1% | `DIABETE3` ≠ 1, not diabetic (100%) |
 | `_FLSHOT6`, `_PNEUMO2` | 64% | 4.6% | 16.4% | age < 65 (98.8%) |
-| `AVEDRNK2`, `DRNK3GE5`, `MAXDRNKS` | 52% | 11.1% | 6.4% | no drink in 30 days, or unknown (99.9%) → the value is 0 |
+| `AVEDRNK2`, `DRNK3GE5`, `MAXDRNKS` | 52% | 11.1% | 6.4% | `ALCDAY5` = 888, no drink in 30 days (90%) → the value is 0; or `ALCDAY5` unknown (9%) → stays NaN |
+| physical activity per week (`PA1MIN_`, `PAFREQ1_`, `_MINAC11`, ... 10 features) | 34% | 11.4% | 7.5% | `EXERANY2` = 2, no exercise in 30 days (70%) → the value is 0; or `EXERANY2` unknown (25%) |
 | `SMOKDAY2` | 58% | 6.3% | 12.4% | `SMOKE100` ≠ 1, never smoked 100 cigarettes (99.98%) |
 | landline block (5 features, see §5) | 42.5% | 6.2% | 10.7% | interviewed by cell phone |
 | cell block (`CTELNUM1`, `PVTRESD2`, ...) | 57.5% | 10.7% | 6.2% | interviewed by landline |
@@ -64,11 +65,11 @@ A NaN usually means the question did not apply. Positive rate when NaN vs when a
 
 About 100 questions belong to optional modules asked in some states only (diabetes, caregiving, vision, cognitive decline, asthma call-back, cancer screening, sexual orientation, ...): there a NaN means "state did not ask".
 
-→ Keep NaN as a category or add a NaN indicator. Fill numeric skips with the value they imply (0 days, 0 drinks). Dropping sparse features hurts (§8).
+→ Keep NaN as a category or add a NaN indicator. Fill numeric skips with the value they imply (0 days, 0 drinks, 0 minutes of exercise). Dropping sparse features hurts (§8).
 
 ## 5. Rule for every feature
 
-Groups cover the 321 features exactly once (checked by script). "One-hot" means: keep the raw codes in part 2, and one-hot encode them in part 3 (NaN as its own column).
+Groups cover the 321 features exactly once (checked by script). "One-hot" means: keep the raw codes in part 2, and one-hot encode them in part 3 (NaN as its own column). Implemented in `p1/cleaning.py` (part 2), where every numeric rule was checked against the codebook entry of its feature; `cleaning.NUMERIC` lists the 56 numeric features and `cleaning.HEAVY_TAILED` the 33 heavy-tailed ones.
 
 **Drop: survey design (14).** `SEQNO`, `_PSU` (record id, identical columns), `FMONTH`, `IDATE`, `IMONTH`, `IDAY`, `IYEAR` (interview date), `_STSTR` (state × stratum), `_STRWT`, `_RAWRAKE`, `_WT2RAKE`, `_LLCPWT`, `_CLLCPWT`, `_DUALCOR` (sampling weights). Keeping them changed F1 by -0.0008.
 
@@ -78,28 +79,29 @@ Groups cover the 321 features exactly once (checked by script). "One-hot" means:
 
 **Keep, one-hot: phone blocks (19).** Landline block, NaN for cell interviews: `CTELENUM`, `PVTRESD1`, `CELLFON3`, `NUMHHOL2`, `CPDEMO1` (identical NaN pattern), `STATERES`, `NUMADULT`, `NUMMEN`, `NUMWOMEN` (counts, no codes), `NUMPHON2` (97% NaN), `COLGHOUS`, `LADULT` (32 rows answered). Cell block, NaN for landline interviews: `CTELNUM1`, `PVTRESD2`, `CADULT`, `CSTATE`, `LANDLINE`, `HHADULT` (1–76; 77, 99 → NaN), `CCLGHOUS`. They mostly encode landline vs cell (and household size).
 
-**Numeric with codes (18).** Fixed rules, then use as numbers (or bin):
+**Numeric with codes (19).** Fixed rules, then use as numbers (or bin):
 
 | Feature | Valid | → 0 | → NaN | Skip-logic NaN |
 |---|---|---|---|---|
-| `PHYSHLTH`, `MENTHLTH`, `POORHLTH` | 1–30 days | 88 | 77, 99 | `POORHLTH` NaN → 0 |
+| `PHYSHLTH`, `MENTHLTH`, `POORHLTH` | 1–30 days | 88 | 77, 99 | `POORHLTH` NaN ⇔ `PHYSHLTH` = `MENTHLTH` = 88 → 0 |
 | `CHILDREN` | 1–87 | 88 | 99 | |
-| `AVEDRNK2`, `MAXDRNKS` | 1–76 | | 77, 99 | NaN (no drinking) → 0 |
-| `DRNK3GE5` | 1–76 | 88 | 77, 99 | NaN (no drinking) → 0 |
+| `AVEDRNK2`, `MAXDRNKS` | 1–76 | | 77, 99 | NaN and `ALCDAY5` = 888 (no drink) → 0 |
+| `DRNK3GE5` | 1–76 | 88 | 77, 99 | NaN and `ALCDAY5` = 888 (no drink) → 0 |
 | `JOINPAIN` | 0–10 | | 77, 99 | NaN = no arthritis or not asked |
-| `DIABAGE2` | 1–97 years | | 98, 99 | NaN = not diabetic |
-| `SCNTWRK1`, `SCNTLWK1` | 1–96 hours | 98 = none | 77, 99 (97 = 97+?) | 92% NaN |
+| `DIABAGE2` | 1–97 years (97 = 97+) | | 98, 99 | NaN = not diabetic |
+| `SCNTWRK1`, `SCNTLWK1` | 1–96 hours (77 is valid) | 98 | 97, 99 | 92% NaN |
 | `DOCTDIAB`, `CHKHEMO3`, `FEETCHK` | 1–76 | 88 | 77, 99, `CHKHEMO3` 98 | diabetes module, 93% NaN |
-| `ASTHMAGE` | 11–96 years | | 98, 99 (97 = ≤ 10) | 99.8% NaN, no signal |
+| `ASTHMAGE` | 11–96 years; 97 = 10 or younger → 10 | | 98, 99 | 99.8% NaN, no signal |
 | `ASERVIST`, `ASDRVIST`, `ASRCHKUP` | 1–87 | 88 | 98, 99 | 99.9% NaN, no signal |
+| `ASACTLIM` | 1–365 days | 888 | 777, 999 | 99.9% NaN, no signal |
 
 **Mixed units, replaced by a computed variable (14): drop the raw one.** `WEIGHT2` → `WTKG3` (kg), `HEIGHT3` → `HTM4` (m) / `HTIN4` (in), `ALCDAY5` → `DROCDY3_` and `DRNKANY5`, `FRUITJU1` → `FTJUDA1_`, `FRUIT1` → `FRUTDA1_`, `FVBEANS` → `BEANDAY_`, `FVGREEN` → `GRENDAY_`, `FVORANG` → `ORNGDAY_`, `VEGETAB1` → `VEGEDA1_` (times per day), `EXEROFT1`/`EXEROFT2` → `PAFREQ1_`/`PAFREQ2_` (per week), `EXERHMM1`/`EXERHMM2` → `PADUR1_`/`PADUR2_` (minutes), `STRENGTH` → `STRFREQ_` (per week).
 
-**Mixed units without a computed version (4).** `BLDSUGAR`, `FEETCHK2` (diabetes module: 1xx–4xx per day/week/month/year, 555 no feet, 888 never, 777/999), `LONGWTCH` (1xx–4xx days/weeks/months/years, 555 never, 777/999), `ASACTLIM` (1–365 days, 888 none, 777/999). Convert to one unit, or quantile-bin; all ≥ 93% NaN, weak signal.
+**Mixed units without a computed version (3).** `BLDSUGAR`, `FEETCHK2` (diabetes module: 1xx–4xx times per day/week/month/year, 888 never, `FEETCHK2` 555 = no feet, 777/999) → times per year, never → 0. `LONGWTCH` (how long watching salt intake: 1xx–4xx days/weeks/months/years, 555 = all my life, 777/999) → years, all my life → the age (`_AGE80`). All ≥ 93% NaN, weak signal.
 
-**Dates MMYYYY (2).** `FLSHTMY2` (last flu shot), `HIVTSTD3` (last HIV test; 77YYYY = month unknown); 777777 and 999999 → NaN. Convert to months before 01/2016, or quantile-bin. Their signal is mostly in the NaN pattern.
+**Dates MMYYYY (2).** `FLSHTMY2` (last flu shot, 2014–2016), `HIVTSTD3` (last HIV test; 77YYYY = month unknown in 27k rows; a few impossible years such as 201, 1886, 2104); 777777 and 999999 → NaN. Converted to months before the interview (`IYEAR`, `IMONTH`): an unknown month counts as mid-year, a date later in the interview year as 0, years before 1985 (which the survey codes 777777) or after the interview → NaN. Their signal is mostly in the NaN pattern.
 
-**Computed numeric (32).** Already clean except for these codes: `DROCDY3_` 900 → NaN, `_DRNKWEK` 99900 → NaN, `MAXVO2_` and `FC60_` 999 → NaN. List: `_AGE80` (18–80), `HTIN4`, `HTM4`, `WTKG3`, `_BMI5` (BMI, already divided by 100), `DROCDY3_`, `_DRNKWEK`, `FTJUDA1_`, `FRUTDA1_`, `BEANDAY_`, `GRENDAY_`, `ORNGDAY_`, `VEGEDA1_`, `_FRUTSUM`, `_VEGESUM`, `METVL11_`, `METVL21_`, `MAXVO2_`, `FC60_`, `PADUR1_`, `PADUR2_`, `PAFREQ1_`, `PAFREQ2_`, `_MINAC11`, `_MINAC21`, `STRFREQ_`, `PAMIN11_`, `PAMIN21_`, `PA1MIN_`, `PAVIG11_`, `PAVIG21_`, `PA1VIGM_`. The activity minutes and fruit/vegetable frequencies are heavy-tailed (99th percentile far above the median; max 54,000 minutes): use `log1p` or clipping, or bin. `MAXVO2_` and `FC60_` are functions of age and sex.
+**Computed numeric (32).** Already clean except for these codes: `DROCDY3_` 900 → NaN, `_DRNKWEK` 99900 → NaN, `MAXVO2_` and `FC60_` 999 → NaN, `PAFREQ1_`, `PAFREQ2_` and `STRFREQ_` 99 → NaN (99,000 with 3 implied decimals = don't know, about 20 rows each). This release already removed the implied decimals (`HTM4` in m, `WTKG3` in kg, fruit and vegetables in times per day), except in `DROCDY3_` and `_DRNKWEK`, still in hundredths (daily drinking = 100; 2 drinks a day = 1400, i.e. 14 drinks per week), which part 2 divides by 100. Their skip logic: the activity amounts are NaN when `EXERANY2` ≠ 1; for `EXERANY2` = 2 (no exercise) part 2 sets the 10 amounts per week (`PAFREQ*`, `_MINAC*`, `PAMIN*`, `PAVIG*`, `PA1MIN_`, `PA1VIGM_`) to 0, and for `EXRACT21` = 88 (no second activity) the 4 second-activity ones (the CDC already sets its minutes to 0 but leaves `PAFREQ2_` NaN). Session length (`PADUR*`) and intensity (`METVL*`) stay NaN. List: `_AGE80` (18–80), `HTIN4`, `HTM4`, `WTKG3`, `_BMI5` (BMI, already divided by 100), `DROCDY3_`, `_DRNKWEK`, `FTJUDA1_`, `FRUTDA1_`, `BEANDAY_`, `GRENDAY_`, `ORNGDAY_`, `VEGEDA1_`, `_FRUTSUM`, `_VEGESUM`, `METVL11_`, `METVL21_`, `MAXVO2_`, `FC60_`, `PADUR1_`, `PADUR2_`, `PAFREQ1_`, `PAFREQ2_`, `_MINAC11`, `_MINAC21`, `STRFREQ_`, `PAMIN11_`, `PAMIN21_`, `PA1MIN_`, `PAVIG11_`, `PAVIG21_`, `PA1VIGM_`. The activity minutes and fruit/vegetable frequencies are heavy-tailed (99th percentile far above the median; max 54,000 minutes): use `log1p` or clipping, or bin. `MAXVO2_` and `FC60_` are functions of age and sex.
 
 **Nominal with many codes (2).** `EXRACT11`, `EXRACT21` (type of main activities, codes 1–76; 77, 99 DK/refused; 88 = no second activity; 98 = other): one-hot with a minimum count, needs `max_levels` ≥ 80.
 
@@ -141,7 +143,7 @@ Scratch scripts, not kept in the repo; to be redone with `p1 cv` in part 3 for t
 |---|---|---|---|
 | A: raw values, NaN → median (321 columns) | 0.8528 | 0.4172 | 0.196 |
 | B: A without the 14 design columns | 0.8527 | 0.4171 | |
-| C: codes cleaned, NaN → median | 0.8618 | 0.4332 | 0.246 |
+| C: codes cleaned (numeric rules, and "don't know"/"refused" of the categorical answers → NaN), NaN → median | 0.8618 | 0.4332 | 0.246 |
 | D: C + NaN indicators | 0.8646 | 0.4387 | 0.269 |
 | **E: one-hot categorical + cleaned numerics + NaN indicators** | **0.8650** | **0.4400** | 0.275 |
 | E with the design columns | 0.8649 | 0.4392 | |
@@ -166,16 +168,28 @@ Other results on encoding E:
 - **Plain GD for logistic regression** (as in `implementations.logistic_regression`), on standardized E: λ_max(XᵀX/N) = 56.4, so the step size γ = 4/λ_max ≈ 0.07. 50 iterations → 0.4312, 100 → 0.4357, 300 → 0.4400, 1000 → 0.4424, 2000 → 0.4403, at about 0.15 s per iteration on 262k rows. A Newton fit takes about 35 s.
 - **Ridge regression probe** (closed form, scores used as probabilities): raw 0.8452 / 0.4154, E 0.8581 / 0.4366, G1 0.8564 / 0.4346 (AUC / best F1). The same ranking of encodings as logistic regression, 0.002–0.004 F1 lower.
 
+### On the part-2 clean data
+
+Same setup, run on the output of `p1/cleaning.py` (2026-10-27). Encoding E here: the 56 `cleaning.NUMERIC` features with NaN → median plus NaN indicators (`log1p` for `cleaning.HEAVY_TAILED` where noted), every other feature one-hot (levels with ≥ 30 rows, up to 100 levels, plus a NaN column), 1,538 columns.
+
+- **Every feature read as a number, NaN → median**: raw 0.4168, clean 0.4168 (AUC 0.8526 / 0.8530); with NaN indicators 0.4227. Part 2 keeps the categorical codes, which still distort when read as numbers. Turning the categorical "don't know"/"refused" codes into NaN too (7/9, 77/99 or 777/999 by field width) gives 0.4332 (AUC 0.8612), the EDA's C: that is where C's gain came from.
+- **The 56 numeric features alone**, NaN → median plus indicators: raw codes 0.3385 (AUC 0.7989), clean 0.3447 (AUC 0.8042).
+- **Encoding E**: AUC 0.8651, F1 0.4406 on the split, as in the EDA. Paired 5-fold CV (folds from `np.array_split` of the seed-42 permutation): numeric features as raw codes 0.4404 ± 0.0021, clean 0.4401 ± 0.0018 (paired difference −0.0003 ± 0.0009), clean + `log1p` 0.4403 ± 0.0018; AUC 0.8636 for all three. Inside E, neither the numeric cleaning nor `log1p` changes the score: the one-hot answers and the CDC recodes carry the same information.
+- **Activity skip fill** (no exercise → 0 per week): no change (E 0.4408 without it, 0.4406 with it; D 0.4227 both).
+- **Univariate AUC of the value read as a number**, raw → clean: `AVEDRNK2` 0.502 → 0.586, `_MINAC11` 0.502 → 0.558, `PHYSHLTH` 0.579 → 0.631, `MAXDRNKS` 0.539 → 0.582, the weekly activity amounts +0.02 to +0.05. The fills merge "skipped" with "answered zero", so as categories some lose signal (`DRNK3GE5` 0.581 → 0.538, `PAVIG11_` 0.592 → 0.527); the gate questions (`DRNKANY5`, `EXERANY2`) are kept, so a multivariate model can still tell them apart.
+
 ## 8. Recommendations
 
-Part 2 (`p1/cleaning.py`, fixed rules applied to train and test alike):
+Part 2 (`p1/cleaning.py`, fixed rules applied to train and test alike) is done, following these rules with the corrections of §5 (checked against the codebook):
 1. Drop the 14 survey-design columns and the 2 exact copies.
-2. Apply the code rules of §5 to the numeric features, including the skip-logic fills (`POORHLTH`, drinking). Drop the 14 raw mixed-unit features that have a computed version. Convert or leave the 4 without one, and convert or leave the 2 date features, for part-3 binning.
+2. Apply the code rules of §5 to the numeric features, including the skip-logic fills (`POORHLTH`, drinking, physical activity). Drop the 14 raw mixed-unit features that have a computed version. Convert the 3 without one to times per year or years, and the 2 dates to months before the interview.
 3. Keep everything else unchanged, codes included (part 3 one-hot encodes them). Keep `HAREHAB1`.
+
+For the report's ablation: the EDA's step "raw → codes cleaned" (+0.016 F1) needs every feature read as a number and the categorical "don't know"/"refused" codes turned into NaN, which part 2 does not do. With one-hot encoding the numeric cleaning is worth nothing measurable (above), so credit the gain to the encoding, not to the cleaning.
 
 Part 3.1 (transforms, refitted on each training fold):
 - `onehot` with levels learned on the training fold (`max_levels` around 30, `min_count` around 30, NaN column), for the categorical features.
-- NaN indicators plus median imputation for numeric features, `log1p` for the heavy-tailed ones (or quantile-bin them into the one-hot).
+- NaN indicators plus median imputation for the numeric features (`cleaning.NUMERIC`), `log1p` for the heavy-tailed ones (`cleaning.HEAVY_TAILED`; optional, it changed 5-fold F1 by +0.0002), or quantile-bin them into the one-hot.
 - `standardize` last.
 - The generic encoding G1 (one-hot or bin everything, no code rules) is a strong fallback, only 0.0013 F1 below E.
 

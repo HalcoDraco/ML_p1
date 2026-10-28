@@ -8,6 +8,7 @@ from p1.paths import FIGURES_DIR
 
 # Colorblind-safe series colors, and ink colors for text, axes and grid.
 BLUE, ORANGE, AQUA = "#2a78d6", "#eb6834", "#1baf7a"
+BLUE_LIGHT = "#86b6ef"  # lighter step of BLUE, for the "before" of before/after
 INK, INK_SOFT, MUTED, GRID = "#0b0b0b", "#52514e", "#898781", "#e1e0d9"
 
 
@@ -297,8 +298,12 @@ def print_table(header: list[str], rows: list[tuple], align: str = "") -> None:
 
 
 def save_figure(fig: Figure, name: str) -> Path:
-    """Save `fig` as `report/figures/<name>.pdf` and return the file path."""
+    """Save `fig` as `report/figures/<name>.pdf` and return the file path.
+
+    The PDF gets no creation date, so rerunning a notebook leaves unchanged
+    figures byte-identical and git shows no change.
+    """
     FIGURES_DIR.mkdir(parents=True, exist_ok=True)
     path = FIGURES_DIR / f"{name}.pdf"
-    fig.savefig(path, bbox_inches="tight")
+    fig.savefig(path, bbox_inches="tight", metadata={"CreationDate": None})
     return path

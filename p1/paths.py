@@ -7,6 +7,7 @@ RAW_ZIP = RAW_DIR / "dataset_to_release.zip"
 PROCESSED_DIR = ROOT / "data" / "processed"
 RAW_CACHE = PROCESSED_DIR / "raw.npz"
 CLEAN_DATA = PROCESSED_DIR / "clean.npz"
+CLEANING_RULES = ROOT / "p1" / "cleaning.py"  # CLEAN_DATA is stale if this is newer
 
 CONFIGS_DIR = ROOT / "configs"
 OUTPUTS_DIR = ROOT / "outputs"

@@ -116,7 +116,7 @@ uv run run.py                                    # reproduce the best submission
 
 Details for building the structure (written for Claude). You can stop reading above.
 
-**Status (2026-10-27):** steps 1–6 are done as a skeleton: every function body is `pass`, and `uv run p1 …`, `uv run run.py` and the notebooks run without errors. `implementations.py` has absorbed `utils.py` and is black-formatted, but its code is unchanged: the per-iteration prints (step 2) and the bugs in §7 are still to fix.
+**Status (2026-10-27):** steps 1–6 are done as a skeleton: every function body is `pass`, and `uv run p1 …`, `uv run run.py` and the notebooks run without errors. Since then `data.py`, `cleaning.py` and `eda.py` have been implemented (parts 1 and 2). `implementations.py` has absorbed `utils.py` and is black-formatted, but its code is unchanged: the per-iteration prints (step 2) and the bugs in §7 are still to fix.
 
 **Ground rules:** never commit; the user does that. Use `git mv` on tracked files so history follows them. Every `.py` file must be black-formatted with default settings and must not contain "todo" in any casing, because the grading tests scan every `.py` in the repo. It's a plain substring check, so the Spanish word "todo/todos" in a comment also fails.
 
@@ -179,12 +179,13 @@ Conventions:
 - Every path comes from `paths.py`, never relative to the cwd (notebooks run from `notebooks/`).
 
 Modules:
-- `paths.py`: `ROOT = Path(__file__).resolve().parent.parent`; `RAW_DIR, RAW_ZIP, RAW_CACHE, CLEAN_DATA, CONFIGS_DIR, OUTPUTS_DIR, CV_RESULTS, MODELS_DIR, SUBMISSIONS_DIR, FIGURES_DIR`.
+- `paths.py`: `ROOT = Path(__file__).resolve().parent.parent`; `RAW_DIR, RAW_ZIP, PROCESSED_DIR, RAW_CACHE, CLEAN_DATA, CLEANING_RULES, CONFIGS_DIR, OUTPUTS_DIR, CV_RESULTS, MODELS_DIR, SUBMISSIONS_DIR, FIGURES_DIR`.
 - `data.py`:
-  - `load_raw()`: if the CSVs are missing, extract `RAW_ZIP` (its members sit under `dataset/`, so flatten them). Parse with `helpers.load_csv_data`, take feature names from the CSV header (minus `Id`), and cache to `RAW_CACHE` with `np.savez` because `genfromtxt` is slow.
-  - `load_clean()`: if `CLEAN_DATA` is missing, raise `FileNotFoundError` pointing to `notebooks/02_cleaning.ipynb`. Warn if `cleaning.py` is newer than it. It doesn't build the file itself because `cleaning` imports `data`, so importing `cleaning` back would be circular.
+  - `load_raw()`: if the CSVs are missing, extract `RAW_ZIP` (its members sit under `dataset/`, so flatten them). Parse with `helpers.load_csv_data`, take feature names from the CSV header (minus `Id`), and cache to `RAW_CACHE` with `save_dataset` because `genfromtxt` is slow.
+  - `load_clean()`: if `CLEAN_DATA` is missing, raise `FileNotFoundError` pointing to `notebooks/02_cleaning.ipynb`. Warn if `cleaning.py` (`CLEANING_RULES`) is newer than it. It doesn't build the file itself because `cleaning` imports `data`, so importing `cleaning` back would be circular.
+  - `save_dataset(ds, path)`: uncompressed `np.savez` of the six fields (about 1 GB each for raw and clean, loads in about 1 s).
   - `write_submission(ids, y01, path)`: map labels to `{-1, 1}`, then call `helpers.create_csv_submission`.
-- `cleaning.py`: `clean(x, feature_names) -> (x, feature_names)` is pure and deterministic, fits nothing, and is applied identically to train and test. `build_clean_dataset()`: `load_raw` → `clean` both → save `CLEAN_DATA`.
+- `cleaning.py`: `clean(x, feature_names) -> (x, feature_names)` is pure and deterministic, fits nothing, and is applied identically to train and test (321 → 291 columns, input order kept). `build_clean_dataset()`: `load_raw` → `clean` both → save `CLEAN_DATA`. The rules are module constants: `DROPPED` (= `SURVEY_DESIGN + EXACT_COPIES + MIXED_UNITS`), `CODES` (numeric code → value), the activity lists for the skip fills. For part 3 it also exports `NUMERIC` (the 56 clean features to use as numbers; all others are categorical codes to one-hot) and `HEAVY_TAILED` (33 of them, for `log1p`).
 - `eda.py`: matplotlib and summary helpers for the notebooks. Part-3 code never imports it.
 - `transforms.py`:
   - Base `Transform` with `fit(x, y=None) -> self` (no-op by default), `transform(x)` and `fit_transform`.
