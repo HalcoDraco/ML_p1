@@ -1,6 +1,8 @@
 # Progress
 
-Last updated: 2026-10-28. Deadline: Thursday 2026-10-29, 16:00.
+Last updated: 2026-10-28, 19:00. Deadline: Thursday 2026-10-29, 16:00.
+
+**Start here: `docs/part3_results.md`** (part-3 results, what they suggest, next steps with commands).
 
 ## Status
 
@@ -13,11 +15,11 @@ Last updated: 2026-10-28. Deadline: Thursday 2026-10-29, 16:00.
 | Part 2: cleaning | **done** | `p1/cleaning.py`, `notebooks/02_cleaning.ipynb` (executed) → `data/processed/clean.npz`: 291 features, 56 numeric (`cleaning.NUMERIC`) and 235 categorical |
 | Part 3: transforms, models, pipeline, CV, CLI | infrastructure done | everything runs (`p1 cv/train/predict`) |
 | Part 3: OOF tooling | **done** (2026-10-28) | every CV fold writes `outputs/oof/<run>/seed<s>_fold<k>.npz` (validation + test scores); `p1 cv --fold K --variant I`, `p1 collect`, `compare`, `blend`, `stages`, `submit`; `p1/ensemble.py` |
-| Part 3: NumPy GBDT | **implemented, first CV round running** | `p1/gbdt.py`, preset `configs/gbdt.toml`; sanity checks pass; 0.45 s per depth-5 tree on a training fold (histogram subtraction) |
+| Part 3: NumPy GBDT | **done, tuned** | `p1/gbdt.py`; tuned preset `configs/gbdt_tuned.toml` (ordinal splits, feature fraction 0.3, λ 10, depth 5, η 0.05, 550 trees): nested F1 0.4457 per run, 3-seed bag 0.4462 vs LR 0.4386 (+0.0077, t 4.28) |
 | Cluster (SCITAS jed) | **set up** | `slurm/submit.sh` + `slurm/p1.sbatch`, see "Cluster" below |
 | Deep research | **done** | 3 reports in `docs/deep_research_outputs/`, judged and merged into `docs/deep_research_synthesis.md` |
-| Model plan | written, not started | `docs/model_plan.md`: OOF tooling → NumPy GBDT → tuning/ablations → blend → final; gates, compute, timeline |
-| `run.py`, `configs/best.toml` | not started | stubs, waiting for the first submission |
+| Model plan | steps 1–4 done | `docs/model_plan.md`; results in `docs/part3_results.md`; left: report ablations with the tuned settings, documentation |
+| `run.py`, `configs/best.toml` | **done** | refits the 3-seed `gbdt_tuned` bag on all rows (2 min 46 s on the cluster), threshold 0.2166 → `outputs/submissions/best.csv`: 12.94% flagged, 238/238 `HAREHAB1` → 1, 99.3% agreement with `fc_bag.csv`. **Not yet submitted** |
 | Report | not started | figures ready in `report/figures/`: `eda_*.pdf`, `clean_numeric_auc.pdf` |
 | AIcrowd submissions | 1 | `logistic.csv` (step2/logistic, CV 0.4390): **F1 0.449, accuracy 0.885**, rank 37; top team 0.460 / 0.881 |
 
@@ -76,18 +78,12 @@ Implemented so far in `p1/`:
 
 ## Next steps (in priority order)
 
-1. First AIcrowd submission: `outputs/submissions/logistic.csv` is ready (written by `uv run p1 train step2/logistic` and `uv run p1 predict logistic`, CV F1 0.439; not yet submitted). After submitting, copy `configs/step2/logistic.toml` into `configs/best.toml` and write `run.py` (`build_clean_dataset()` → `load_clean()` → `load_config("best")` → fit on all rows → `outputs/submissions/best.csv`).
-2. Part 3 models: follow `docs/model_plan.md` (steps 1–6, gates and timeline there).
-   - CV tooling: OOF fold files, per-fold F1, `--jobs`, `compare` with the Nadeau–Bengio corrected t-test, `blend`, a `drop` key.
-   - `p1/gbdt.py`: a level-wise histogram GBDT with a NaN bin and sorted categorical splits. Gate 1 on fold 1: AUC ≥ LR + 0.003, F1 not below the LR's.
-   - A grid and ablations (depth 1/2/best, ordinal-only splits, without `HAREHAB1`), on the cluster or locally.
-   - An OOF logit blend of the LR and 3 GBDT seeds; 3 × 5 repeated CV; the final model is the highest mean F1, with nested OOF thresholds.
-   - Dropped, with reasons in the synthesis §4 and §8: factorization machines (only with spare time), GBDT leaves → LR, embedding MLPs, F1-shaped losses, resampling, `log1p` (neutral). Hand-made interactions are only the fallback if the GBDT fails. Newton logistic is optional (≤ +0.001).
-   - The `HAREHAB1` → 1 rule becomes a check on every submission: all 238 test rows that answered it must be predicted 1.
-3. The report, with the ablation of `docs/model_plan.md` step 7:
-   - Raw least squares → one-hot logistic → GBDT depth 1 / 2 / best → without `HAREHAB1` → blend.
-   - With one-hot encoding, the cleaning adds nothing, and the EDA's "codes cleaned" step needs the categorical don't-know codes turned into NaN, which part 2 does not do (`docs/eda_findings.md` §7–8).
-   - The first half of the report (data, cleaning, encoding, step-2 table) can be written now.
+Details and commands: `docs/part3_results.md` §6.
+1. Submit `outputs/submissions/best.csv` (written by `run.py`, checked; expected ≈ 0.456 on AIcrowd) and record the score here.
+2. Optional: η 0.02 / 1,800-tree bag on fold seeds 42/43/44 (best log-loss, 0.21349); adopt it only if its 15-fold mean nested F1 beats `fc_bag`.
+3. Report ablations with the tuned settings on 3 fold seeds: depth 1, depth 2, sorted categorical splits, without `HAREHAB1` (GBDT and LR), the raw baseline.
+4. Documentation: `STRUCTURE.md` contracts (`gbdt.py`, `ensemble.py`, CLI, `slurm/`), README results table, report (first half can be written now).
+5. Low priority (≤ +0.002 each): bag of configurations, MLP/FM blend member, count features.
 
 ## Session log
 
@@ -97,3 +93,4 @@ Implemented so far in `p1/`:
 - 2026-10-28: wrote `docs/deep_research_prompt.md`, a self-contained prompt for an external deep-research engine (constraints, data facts, current results, what was tried, research questions, output format); measured the fold-1 operating point and scanned for other leaks (none). Rebuilt `clean.npz`: the git checkouts had made `p1/cleaning.py` newer than it, which made `load_clean` warn.
 - 2026-10-28: merged the three deep-research reports into `docs/deep_research_synthesis.md`: claims judged, and Gemini's aspirin-module claims checked on the data and rejected. Measured the NumPy cost of one GBDT tree, and wrote `docs/model_plan.md` (plan only, nothing implemented). Scratch scripts were not kept.
 - 2026-10-28 (cluster session): fresh clone on SCITAS jed; installed uv, rebuilt the data in a job. Submitted `logistic.csv`: AIcrowd F1 0.449 (CV 0.439, offset +0.010 as other teams saw). Implemented the OOF tooling (`p1/ensemble.py`, new `evaluation.py`, CLI commands) and the NumPy GBDT (`p1/gbdt.py`), and the slurm scripts. Launched the LR with fold seeds 42/43/44 and 15 GBDT variants (5 folds each) on the cluster.
+- 2026-10-28 (cluster session, continued): GBDT round 1 (15 variants) and round 2 (7 variants) on 5 folds; tuned GBDT bag on 3 fold seeds × 3 model seeds; blends; ordinal splits beat sorted categorical splits; ensembling adds nothing measurable. Wrote `configs/gbdt_tuned.toml`, `configs/best.toml`, `run.py` (ran on the cluster → `best.csv`) and `docs/part3_results.md`.
