@@ -1,0 +1,65 @@
+{
+  "description": "Archived measurements, not newly executed experiments. Each block retains its original evaluation protocol.",
+  "source_commit": "319abc8",
+  "baseline": {
+    "source": "README.md",
+    "source_section": "Results of uv run p1 cv configs/step2/*.toml baseline",
+    "protocol": "Five shuffled folds, split seed 42; thresholds fitted on each model's training scores. Spread is fold standard deviation, not a confidence interval.",
+    "rows": [
+      {"id": "baseline", "label": "Raw least squares", "f1": 0.4095, "std": 0.0019, "auc": 0.845},
+      {"id": "mse_gd", "label": "MSE / GD", "f1": 0.4289, "std": 0.0022, "auc": 0.858},
+      {"id": "mse_sgd", "label": "MSE / SGD", "f1": 0.4255, "std": 0.0033, "auc": 0.855},
+      {"id": "least_squares", "label": "Least squares", "f1": 0.4301, "std": 0.0018, "auc": 0.857},
+      {"id": "ridge", "label": "Ridge", "f1": 0.4297, "std": 0.0031, "auc": 0.858},
+      {"id": "logistic", "label": "Logistic / GD", "f1": 0.4390, "std": 0.0027, "auc": 0.864},
+      {"id": "reg_logistic", "label": "L2 logistic / GD", "f1": 0.4388, "std": 0.0022, "auc": 0.864}
+    ]
+  },
+  "encoding": {
+    "source": "docs/eda_findings.md",
+    "source_section": "Scratch scripts, not kept in the repo; Encoding table A, C, D, E",
+    "protocol": "Exploratory 80/20 split, seed 42, logistic regression with Newton optimization and L2 penalty. Each F1 maximizes the threshold on the validation set; these are optimistic diagnostic results, not the repeated-CV comparison.",
+    "rows": [
+      {"id": "A", "label": "Raw codes + imputation", "f1": 0.4172, "auc": 0.8528},
+      {"id": "C", "label": "Recoding + imputation", "f1": 0.4332, "auc": 0.8618},
+      {"id": "D", "label": "+ Missingness indicators", "f1": 0.4387, "auc": 0.8646},
+      {"id": "E", "label": "+ One-hot categories", "f1": 0.4400, "auc": 0.8650}
+    ],
+    "caveat": "C also removes survey-design columns and maps categorical unknown/refused codes to missing. This exploratory sequence differs from the final cleaning pipeline, which retains categorical codes. Numeric cleaning alone adds no measurable gain after one-hot encoding."
+  },
+  "advanced": {
+    "sources": ["docs/part3_results.md", "docs/round3_summary.md"],
+    "protocol": "Mean over three split seeds (42, 43, 44), five folds each. Threshold for each scored fold comes from the other folds' OOF predictions. Model and blend selection also use these data; this is not fully nested model-selection CV.",
+    "rows": [
+      {"id": "logistic", "label": "Logistic regression", "f1": 0.4386, "source": "docs/part3_results.md"},
+      {"id": "m5", "label": "Neural network", "f1": 0.4399, "source": "docs/round3_summary.md"},
+      {"id": "fc_bag", "label": "GBDT ensemble", "f1": 0.4462, "source": "docs/round3_summary.md"},
+      {"id": "blend_fc_m5", "label": "GBDT + neural network", "f1": 0.4469, "source": "docs/round3_summary.md"},
+      {"id": "fe2_bag5", "label": "GBDT + engineered features", "f1": 0.4474, "source": "docs/round3_summary.md"}
+    ]
+  },
+  "exploratory_neural": {
+    "source": "docs/eda_findings.md",
+    "protocol": "Exploratory holdout, validation-selected stopping and threshold; not interchangeable with the later repeated-CV m5 experiment.",
+    "rows": [
+      {"hidden_units": 64, "dropout": null, "f1": 0.4341, "auc": 0.8622},
+      {"hidden_units": 256, "dropout": 0.3, "f1": 0.4402, "auc": 0.8644}
+    ],
+    "architecture": "One hidden ReLU layer, Adam, validation-based early stopping. Reported overfitting after one to two epochs. Source script and full optimization settings are not archived."
+  },
+  "paired_comparisons": {
+    "source": "docs/part3_results.md",
+    "protocol": "Nadeau-Bengio corrected paired comparisons over 15 shared folds; exploratory inference after model selection, without multiplicity correction.",
+    "rows": [
+      {"comparison": "fc_bag minus logistic", "diff": 0.0077, "t": 4.28, "low": 0.0038, "high": 0.0115},
+      {"comparison": "GBDT plus logistic minus fc_bag", "diff": 0.0001, "t": 0.25, "low": -0.0008, "high": 0.0010}
+    ]
+  },
+  "leaderboard": {
+    "f1": 0.456,
+    "source": "Team member confirmation in the accompanying conversation, 2026-10-29",
+    "configuration": null,
+    "submission_id": null,
+    "status": "Confirmed by team; not independently linked to a CSV or configuration in this checkout."
+  }
+}

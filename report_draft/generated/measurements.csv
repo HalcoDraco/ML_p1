@@ -1,0 +1,17 @@
+protocol,experiment,f1,fold_std,source
+baseline,baseline,0.4095,0.0019,README.md
+baseline,mse_gd,0.4289,0.0022,README.md
+baseline,mse_sgd,0.4255,0.0033,README.md
+baseline,least_squares,0.4301,0.0018,README.md
+baseline,ridge,0.4297,0.0031,README.md
+baseline,logistic,0.439,0.0027,README.md
+baseline,reg_logistic,0.4388,0.0022,README.md
+encoding,A,0.4172,,docs/eda_findings.md
+encoding,C,0.4332,,docs/eda_findings.md
+encoding,D,0.4387,,docs/eda_findings.md
+encoding,E,0.44,,docs/eda_findings.md
+advanced,logistic,0.4386,,docs/part3_results.md
+advanced,m5,0.4399,,docs/round3_summary.md
+advanced,fc_bag,0.4462,,docs/round3_summary.md
+advanced,blend_fc_m5,0.4469,,docs/round3_summary.md
+advanced,fe2_bag5,0.4474,,docs/round3_summary.md

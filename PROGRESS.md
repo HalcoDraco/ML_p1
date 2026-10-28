@@ -1,6 +1,6 @@
 # Progress
 
-Last updated: 2026-10-28, 19:00. Deadline: Thursday 2026-10-29, 16:00.
+Last updated: 2026-10-29 (report preparation; experimental measurements are archived). Deadline: Thursday 2026-10-29, 16:00.
 
 **Start here: `docs/part3_results.md`** (part-3 results, what they suggest, next steps with commands).
 
@@ -19,9 +19,9 @@ Last updated: 2026-10-28, 19:00. Deadline: Thursday 2026-10-29, 16:00.
 | Cluster (SCITAS jed) | **set up** | `slurm/submit.sh` + `slurm/p1.sbatch`, see "Cluster" below |
 | Deep research | **done** | 3 reports in `docs/deep_research_outputs/`, judged and merged into `docs/deep_research_synthesis.md` |
 | Model plan | steps 1–4 done | `docs/model_plan.md`; results in `docs/part3_results.md`; left: report ablations with the tuned settings, documentation |
-| `run.py`, `configs/best.toml` | **done** | refits the 3-seed `gbdt_tuned` bag on all rows (2 min 46 s on the cluster), threshold 0.2166 → `outputs/submissions/best.csv`: 12.94% flagged, 238/238 `HAREHAB1` → 1, 99.3% agreement with `fc_bag.csv`. **Not yet submitted** |
-| Report | not started | figures ready in `report/figures/`: `eda_*.pdf`, `clean_numeric_auc.pdf` |
-| AIcrowd submissions | 1 | `logistic.csv` (step2/logistic, CV 0.4390): **F1 0.449, accuracy 0.885**, rank 37; top team 0.460 / 0.881 |
+| `run.py`, `configs/best.toml` | earlier recipe retained | refits the 3-seed `gbdt_tuned` bag, threshold 0.2166. The team-confirmed 0.456 submission has not been mapped to its producing configuration; see `report_draft/HANDOFF.md`. |
+| Report | **complete draft, compiled and visually reviewed** | `report_draft/report.pdf`: 2 content pages + 1 reference page, IEEE 10 pt; numerical methods, MLPs, two Seaborn vector figures, source-labelled measurements and build checks. Author names included; email addresses await confirmation. Original `report/` remains the course template. |
+| AIcrowd submissions | best reported F1 **0.456** | confirmed by Roger on 2026-10-29; exact CSV/configuration and submission ID not available in this checkout. Earlier recorded scores: logistic 0.449 and `best.csv` 0.454. |
 
 Implemented so far in `p1/`:
 - `data.py`: `load_raw()` extracts the CSVs from the zip if missing, parses them with `helpers.load_csv_data`, and caches them in `data/processed/raw.npz` (about 0.5 s to load, 37 s the first time). `load_clean()` reads `clean.npz` (0.9 s), raises `FileNotFoundError` if it is missing and warns if `p1/cleaning.py` is newer. `save_dataset()` writes either file. `write_submission()` maps {0, 1} to {-1, 1} and calls `helpers.create_csv_submission`.
@@ -79,7 +79,7 @@ Implemented so far in `p1/`:
 ## Next steps (in priority order)
 
 Details and commands: `docs/part3_results.md` §6.
-1. Submit `outputs/submissions/best.csv` (written by `run.py`, checked; expected ≈ 0.456 on AIcrowd) and record the score here.
+1. Identify the CSV/configuration and submission ID behind the team-confirmed 0.456, then verify exact reproduction. Report handoff and candidate email addresses: `report_draft/HANDOFF.md`.
 2. Optional: η 0.02 / 1,800-tree bag on fold seeds 42/43/44 (best log-loss, 0.21349); adopt it only if its 15-fold mean nested F1 beats `fc_bag`.
 3. Report ablations with the tuned settings on 3 fold seeds: depth 1, depth 2, sorted categorical splits, without `HAREHAB1` (GBDT and LR), the raw baseline.
 4. Documentation: `STRUCTURE.md` contracts (`gbdt.py`, `ensemble.py`, CLI, `slurm/`), README results table, report (first half can be written now).
@@ -95,3 +95,4 @@ Details and commands: `docs/part3_results.md` §6.
 - 2026-10-28 (cluster session): fresh clone on SCITAS jed; installed uv, rebuilt the data in a job. Submitted `logistic.csv`: AIcrowd F1 0.449 (CV 0.439, offset +0.010 as other teams saw). Implemented the OOF tooling (`p1/ensemble.py`, new `evaluation.py`, CLI commands) and the NumPy GBDT (`p1/gbdt.py`), and the slurm scripts. Launched the LR with fold seeds 42/43/44 and 15 GBDT variants (5 folds each) on the cluster.
 - 2026-10-28 (cluster session, continued): GBDT round 1 (15 variants) and round 2 (7 variants) on 5 folds; tuned GBDT bag on 3 fold seeds × 3 model seeds; blends; ordinal splits beat sorted categorical splits; ensembling adds nothing measurable. Wrote `configs/gbdt_tuned.toml`, `configs/best.toml`, `run.py` (ran on the cluster → `best.csv`) and `docs/part3_results.md`.
 - 2026-10-28 (late): `best.csv` scored AIcrowd F1 0.454 / acc 0.882. Round 3 (library benchmarks, count + target-order features, MLP, config bags): best `fe2_bag5` CV 0.4474 (+0.0011 vs `fc_bag`, t 1.51). Summary and the 3 CSVs to submit: `docs/round3_summary.md`. `run.py`/`best.toml` not yet switched to the new model.
+- 2026-10-29: created `report_draft/` with a full English IEEE manuscript, authors supplied by Roger, two Seaborn vector figures, generated numerical table, six verified primary references, source/protocol provenance, reproducible build scripts and a handoff for Jacobo. Compiled and inspected all pages; 2 content pages + 1 references page, no LaTeX overflow or unresolved references. Modeling code and final prediction recipes were not changed. Remaining team inputs: confirmed email addresses and the exact configuration/CSV for the reported 0.456 submission; MLP code/fold artifacts are absent from this checkout.
