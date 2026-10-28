@@ -11,7 +11,9 @@ Last updated: 2026-10-28. Deadline: Thursday 2026-10-29, 16:00.
 | Step 2: run and evaluate the six methods | **done** | presets `configs/step2/*.toml`, `uv run p1 cv configs/step2/*.toml`; README section "Step 2"; results under Key findings |
 | Part 1: EDA | **done** | `notebooks/01_eda.ipynb` (executed), details in `docs/eda_findings.md` |
 | Part 2: cleaning | **done** | `p1/cleaning.py`, `notebooks/02_cleaning.ipynb` (executed) → `data/processed/clean.npz`: 291 features, 56 numeric (`cleaning.NUMERIC`) and 235 categorical |
-| Part 3: transforms, models, pipeline, CV, CLI | infrastructure done | everything runs (`p1 cv/train/predict`); still to do: a better solver (Newton logistic), the ablation presets, `03_results.ipynb` |
+| Part 3: transforms, models, pipeline, CV, CLI | infrastructure done | everything runs (`p1 cv/train/predict`); next: GBDT + blend, following `docs/model_plan.md` |
+| Deep research | **done** | 3 reports in `docs/deep_research_outputs/`, judged and merged into `docs/deep_research_synthesis.md` |
+| Model plan | written, not started | `docs/model_plan.md`: OOF tooling → NumPy GBDT → tuning/ablations → blend → final; gates, compute, timeline |
 | `run.py`, `configs/best.toml` | not started | stubs, waiting for the first submission |
 | Report | not started | figures ready in `report/figures/`: `eda_*.pdf`, `clean_numeric_auc.pdf` |
 | AIcrowd submissions | none yet | |
@@ -42,6 +44,9 @@ Implemented so far in `p1/`:
 - GD on the standardized encoding: λ_max(XᵀX/N) = 63.3, so MSE GD needs γ < 0.032 and logistic γ < 0.126 (γ = 0.25 also converged in practice). MSE GD reaches the least-squares F1 in 100 steps. Logistic GD gives the same F1 after 300 and 1000 steps (0.18 s per step on 262k × 1,527). SGD diverges from γ = 1e-4: squared row norms reach 5·10⁵ (rare one-hot levels after standardization).
 - Cost: a 5-fold CV of the logistic preset takes 5 min; `train` on all rows takes 74 s and peaks at 13 GB of RAM; the saved pipeline is 59 KB.
 - With 25% of the rows F1 drops by 0.013: compare pipelines with `subsample` ≥ 0.5.
+- **Deep research** (`docs/deep_research_synthesis.md`): the best results reported on this dataset are NumPy GBDTs at CV F1 0.442–0.447 (AUC 0.870), against 0.435–0.438 for those teams' own logistic regressions, so the realistic ceiling is about 0.445–0.450. Only a GBDT (+0.004–0.007 expected) and an OOF blend with the LR (+0.001–0.003) are worth building; everything else is ≤ 0.002.
+- Aspirin module, checked on the data: `CVDASPRN` is answered by 14,046 rows (4.3%), all in Georgia, Iowa, Oregon and Puerto Rico; `RLIVPAIN`/`RDUCHART`/`RDUCSTRK` only when `CVDASPRN` = 1, `ASPUNSAF` otherwise; `HAREHAB1` only inside the module. Module rows without `HAREHAB1` are 4.1% positive. No second leak; Gemini's claims about this module are false.
+- GBDT cost, measured with NumPy on one core: the `np.bincount` histograms of one depth-5 tree take 0.33 s (+0.10 s to gather the sample) with 70% of 262k rows and 60% of 291 features, so 500 trees take about 4–5 min per fold.
 
 ## Decisions
 
@@ -59,8 +64,17 @@ Implemented so far in `p1/`:
 ## Next steps (in priority order)
 
 1. First AIcrowd submission: `outputs/submissions/logistic.csv` is ready (written by `uv run p1 train step2/logistic` and `uv run p1 predict logistic`, CV F1 0.439; not yet submitted). After submitting, copy `configs/step2/logistic.toml` into `configs/best.toml` and write `run.py` (`build_clean_dataset()` → `load_clean()` → `load_config("best")` → fit on all rows → `outputs/submissions/best.csv`).
-2. Part 3 models: `docs/deep_research_prompt.md` asks an external deep-research engine which method to add next (GBDT in NumPy, factorization machines, ensembles, ...); choose with its answer. Then a Newton (IRLS) logistic regression as a new model in `models.py` (the exact optimum in about 10 iterations, the EDA's 5-fold F1 ≈ 0.440, vs ≈ 0.438 for 300 GD steps). Then try `log1p` on `heavy_tailed`, the `HAREHAB1` → 1 rule, and interactions; each needs a paired CV comparison (fold noise ±0.004).
-3. Ablation presets for the report, then the report. Build the ablation around the encoding (raw numbers → one-hot → NaN indicators → threshold): with one-hot the cleaning adds nothing, and the EDA's "codes cleaned" step needs the categorical don't-know codes turned into NaN, which part 2 does not do (`docs/eda_findings.md` §7–8). `configs/baseline.toml` (raw numbers, least squares) is the first row; the step-2 table compares the six methods.
+2. Part 3 models: follow `docs/model_plan.md` (steps 1–6, gates and timeline there).
+   - CV tooling: OOF fold files, per-fold F1, `--jobs`, `compare` with the Nadeau–Bengio corrected t-test, `blend`, a `drop` key.
+   - `p1/gbdt.py`: a level-wise histogram GBDT with a NaN bin and sorted categorical splits. Gate 1 on fold 1: AUC ≥ LR + 0.003, F1 not below the LR's.
+   - A grid and ablations (depth 1/2/best, ordinal-only splits, without `HAREHAB1`), on the cluster or locally.
+   - An OOF logit blend of the LR and 3 GBDT seeds; 3 × 5 repeated CV; the final model is the highest mean F1, with nested OOF thresholds.
+   - Dropped, with reasons in the synthesis §4 and §8: factorization machines (only with spare time), GBDT leaves → LR, embedding MLPs, F1-shaped losses, resampling, `log1p` (neutral). Hand-made interactions are only the fallback if the GBDT fails. Newton logistic is optional (≤ +0.001).
+   - The `HAREHAB1` → 1 rule becomes a check on every submission: all 238 test rows that answered it must be predicted 1.
+3. The report, with the ablation of `docs/model_plan.md` step 7:
+   - Raw least squares → one-hot logistic → GBDT depth 1 / 2 / best → without `HAREHAB1` → blend.
+   - With one-hot encoding, the cleaning adds nothing, and the EDA's "codes cleaned" step needs the categorical don't-know codes turned into NaN, which part 2 does not do (`docs/eda_findings.md` §7–8).
+   - The first half of the report (data, cleaning, encoding, step-2 table) can be written now.
 
 ## Session log
 
@@ -68,3 +82,4 @@ Implemented so far in `p1/`:
 - 2026-10-27/28: Part 2: implemented `p1/cleaning.py` (every numeric rule checked against the codebook, which corrected several EDA rules), `data.load_clean`, `save_dataset` and `write_submission`, and wrote and executed `notebooks/02_cleaning.ipynb` (figure `clean_numeric_auc.pdf`). Measured that the cleaning helps numeric-only models but not the one-hot encoding (paired 5-fold CV). Scratch scripts were not kept.
 - 2026-10-28: Step 2: fixed `implementations.py` (25/25 public tests, also on Python 3.9 + NumPy 1.23.1; extra fixes for SGD speed, logistic NaN and overflow); implemented the part-3 modules (`transforms`, `models`, `pipeline`, new `metrics`, `evaluation`, `config`, `cli`); wrote the presets `configs/step2/` after a hyper-parameter sweep on fold 1; ran the 5-fold CV of the six methods plus `baseline` (results in Key findings, rows in `outputs/cv_results.csv`); trained `step2/logistic` and wrote `outputs/submissions/logistic.csv`; added the README section "Step 2" and updated `STRUCTURE.md`. Scratch scripts were not kept.
 - 2026-10-28: wrote `docs/deep_research_prompt.md`, a self-contained prompt for an external deep-research engine (constraints, data facts, current results, what was tried, research questions, output format); measured the fold-1 operating point and scanned for other leaks (none). Rebuilt `clean.npz`: the git checkouts had made `p1/cleaning.py` newer than it, which made `load_clean` warn.
+- 2026-10-28: merged the three deep-research reports into `docs/deep_research_synthesis.md`: claims judged, and Gemini's aspirin-module claims checked on the data and rejected. Measured the NumPy cost of one GBDT tree, and wrote `docs/model_plan.md` (plan only, nothing implemented). Scratch scripts were not kept.
