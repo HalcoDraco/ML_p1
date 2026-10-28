@@ -18,6 +18,7 @@ Data: BRFSS 2015 (CDC telephone health survey), as released for the course. Code
 - Logistic regression on one-hot features learns it on its own (those rows score 0.99–1.0). Removing `HAREHAB1` costs about 0.007 F1. A rule "answered `HAREHAB1` → 1" on top of a model without the feature recovers most of it (0.4332 → 0.4386).
 - Never let a "drop features with many NaNs" filter remove it (99.8% NaN).
 - `STREHAB1` is the same question for strokes, which are not part of MICHD (answered only by stroke patients, 36% positive). It is not a leak.
+- No other leak: among all (feature, value) groups with ≥ 30 rows, NaN included, none other than `HAREHAB1`'s is above 46% positive (the next are `DIABAGE2` = 82, 46% of 70 rows, and `FEETCHK` = 76, 45% of 51 rows).
 
 ## 3. Code conventions
 
