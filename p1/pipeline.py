@@ -1,10 +1,11 @@
-from typing import Self
+from typing import Any, Self
 
 import numpy as np
 
+from p1 import cleaning
 from p1.config import Config
-from p1.models import LinearModel
-from p1.transforms import Transform
+from p1.models import MODELS, LinearModel
+from p1.transforms import TRANSFORMS, Transform
 
 
 class Pipeline:
@@ -19,7 +20,9 @@ class Pipeline:
     def __init__(
         self, transforms: list[Transform], model: LinearModel, seed: int
     ) -> None:
-        pass
+        self.transforms = transforms
+        self.model = model
+        self.seed = seed
 
     def fit(self, x: np.ndarray, y: np.ndarray) -> Self:
         """Fit each transform in order on the training data, then the model.
@@ -33,22 +36,34 @@ class Pipeline:
         Returns:
             The fitted pipeline.
         """
-        pass
+        np.random.seed(self.seed)  # the SGD of implementations.py uses this generator
+        for step in self.transforms:
+            x = step.fit_transform(x, y)
+        self.model.fit(x, y)
+        return self
 
     def predict_score(self, x: np.ndarray) -> np.ndarray:
         """Apply the fitted transforms and return the model's scores."""
-        pass
+        return self.model.predict_score(self._transform(x))
 
     def predict(self, x: np.ndarray) -> np.ndarray:
         """Apply the fitted transforms and return labels in {0, 1}."""
-        pass
+        return self.model.predict(self._transform(x))
+
+    def _transform(self, x: np.ndarray) -> np.ndarray:
+        """Apply the fitted transforms in order."""
+        for step in self.transforms:
+            x = step.transform(x)
+        return x
 
 
 def build_pipeline(config: Config, feature_names: list[str] | None = None) -> Pipeline:
     """Create an unfitted pipeline from a preset.
 
     A transform given as a string uses no options; a table gives its `name` and
-    its options.
+    its options. A `columns` option, a column group or a list of feature names
+    (see `column_indices`), is turned into column indices, so steps with one
+    must come before any step that moves columns, such as `onehot`.
 
     Args:
         config: Preset with `transforms`, `model` and `seed`.
@@ -58,6 +73,67 @@ def build_pipeline(config: Config, feature_names: list[str] | None = None) -> Pi
         The pipeline described by the preset.
 
     Raises:
-        ValueError: If a transform or model name is not registered.
+        ValueError: If a transform or model name is not registered, or a step
+            picks columns by name after a step that moved them.
     """
-    pass
+    steps = []
+    moved_by = None  # name of the first step that removed or reordered columns
+    for item in config["transforms"]:
+        name, options = _name_and_options(item, TRANSFORMS, "transform")
+        if "columns" in options:
+            if moved_by:
+                raise ValueError(
+                    f"transform '{name}' picks columns by name, "
+                    f"so it must come before '{moved_by}'"
+                )
+            options["columns"] = column_indices(options["columns"], feature_names)
+        step = TRANSFORMS[name](**options)
+        if step.moves_columns and not moved_by:
+            moved_by = name
+        steps.append(step)
+    name, options = _name_and_options(config["model"], MODELS, "model")
+    return Pipeline(steps, MODELS[name](**options), config["seed"])
+
+
+def column_indices(
+    columns: str | list[str], feature_names: list[str] | None
+) -> list[int]:
+    """Return the indices, in feature order, of a column group or list of names.
+
+    The groups are "numeric" (`cleaning.NUMERIC`), "heavy_tailed"
+    (`cleaning.HEAVY_TAILED`) and "categorical" (every feature not numeric).
+
+    Raises:
+        ValueError: If the names are missing, or a group or name is unknown.
+    """
+    if feature_names is None:
+        raise ValueError("a `columns` option needs the feature names")
+    if columns == "numeric":
+        names = cleaning.NUMERIC
+    elif columns == "heavy_tailed":
+        names = cleaning.HEAVY_TAILED
+    elif columns == "categorical":
+        names = [name for name in feature_names if name not in cleaning.NUMERIC]
+    elif isinstance(columns, str):
+        raise ValueError(
+            f"unknown column group '{columns}': use numeric, categorical, "
+            "heavy_tailed or a list of feature names"
+        )
+    else:
+        names = columns
+    unknown = sorted(set(names) - set(feature_names))
+    if unknown:
+        raise ValueError(f"unknown feature names: {', '.join(unknown)}")
+    wanted = set(names)
+    return [j for j, name in enumerate(feature_names) if name in wanted]
+
+
+def _name_and_options(
+    item: str | dict[str, Any], registry: dict[str, type], kind: str
+) -> tuple[str, dict[str, Any]]:
+    """Split a preset item into its registered name and its options."""
+    options = {"name": item} if isinstance(item, str) else dict(item)
+    name = options.pop("name")
+    if name not in registry:
+        raise ValueError(f"unknown {kind} '{name}', use one of: {', '.join(registry)}")
+    return name, options

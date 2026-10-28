@@ -21,16 +21,18 @@ The data ships as `data/raw/dataset_to_release.zip`; the CSVs are extracted from
 ├── implementations.py   # the six required step-2 functions
 ├── helpers.py           # course-provided CSV helpers
 ├── notebooks/           # part 1 (EDA), part 2 (cleaning), CV result plots
-├── configs/             # part 3 presets: one pipeline (transforms + model) per file
+├── configs/             # presets: one pipeline (transforms + model) per file
+│   └── step2/           # the six implementations.py methods, on the same encoding
 ├── p1/                  # project code, importable from any folder
 │   ├── paths.py         # every file and folder path
 │   ├── data.py          # load raw and clean data, write submissions
 │   ├── eda.py           # part 1 helpers
 │   ├── cleaning.py      # part 2 rules
-│   ├── transforms.py    # part 3.1: fitted steps (impute, standardize, whiten, polynomial)
-│   ├── models.py        # part 3.2: predictors
+│   ├── transforms.py    # part 3.1: fitted steps (impute, one-hot, standardize, ...)
+│   ├── models.py        # part 3.2: predictors (the six implementations.py methods)
 │   ├── pipeline.py      # transforms + model as one object
-│   ├── evaluation.py    # F1, accuracy, k-fold cross-validation
+│   ├── metrics.py       # F1, accuracy, ROC AUC, F1-optimal threshold
+│   ├── evaluation.py    # k-fold cross-validation
 │   ├── config.py        # presets, overrides, grids
 │   └── cli.py           # part 3 command line
 ├── data/raw/            # dataset zip and the CSVs extracted from it
@@ -71,6 +73,73 @@ Notebooks are for exploring. Code the final pipeline needs lives in `p1/`, so `r
 
 `cleaning.NUMERIC` lists the numeric features and `cleaning.HEAVY_TAILED` those worth a log transform. `notebooks/02_cleaning.ipynb` checks the rules on the data and writes `clean.npz`, and `run.py` rebuilds it with `build_clean_dataset()`. The reason for each rule is in `docs/eda_findings.md`.
 
+## Step 2: the six methods of `implementations.py`
+
+`implementations.py` holds the six functions of the assignment with their exact signatures. It only needs NumPy and runs on Python 3.9 with NumPy 1.23, the grader's environment.
+
+| Function | Method |
+|---|---|
+| `mean_squared_error_gd(y, tx, initial_w, max_iters, gamma)` | linear regression by gradient descent |
+| `mean_squared_error_sgd(y, tx, initial_w, max_iters, gamma)` | linear regression by SGD, one random sample per step |
+| `least_squares(y, tx)` | normal equations (pseudo-inverse, so singular designs work) |
+| `ridge_regression(y, tx, lambda_)` | normal equations of MSE + λ‖w‖² |
+| `logistic_regression(y, tx, initial_w, max_iters, gamma)` | gradient descent on the logistic loss, y ∈ {0, 1} |
+| `reg_logistic_regression(y, tx, lambda_, initial_w, max_iters, gamma)` | the same, plus λ‖w‖² |
+
+Each returns `(w, loss)`: the last weights and the loss at those weights (MSE with the factor 1/2, or logistic loss). For the regularized methods the loss excludes the penalty term. `tx` must already contain the bias column. The functions can be called on any NaN-free matrix:
+
+```python
+import numpy as np
+from implementations import ridge_regression
+
+tx = np.c_[np.ones(len(x)), x]  # x: features without NaNs, shape (N, D)
+w, loss = ridge_regression(y, tx, 1e-3)
+```
+
+### Running them on the data
+
+The clean features contain NaNs and categorical codes, so they need an encoding first. Each method has a preset in `configs/step2/` that runs it after the same encoding of `clean.npz`. Every step of the encoding is learned on the training rows only:
+
+1. The 56 numeric features (`cleaning.NUMERIC`): NaN → median, plus a 0/1 column marking where the value was missing.
+2. The 235 categorical features: one 0/1 column per answer given by at least 30 training rows, plus one for NaN. Codes such as "don't know" keep their own column.
+3. Standardization of every column. The model then adds the bias column.
+
+This gives about 1,530 columns. Commands, from the repository root:
+
+```bash
+uv run p1 cv configs/step2/*.toml                    # the six methods, 5-fold CV on the same folds
+uv run p1 cv step2/logistic                          # one method
+uv run p1 cv step2/logistic --set subsample=0.2      # a quick run on 20% of the rows
+uv run p1 cv step2/ridge --set model.lambda_=1e-2    # change a hyper-parameter
+uv run p1 train step2/logistic                       # fit on all rows → outputs/models/logistic.pkl
+uv run p1 predict logistic                           # → outputs/submissions/logistic.csv
+```
+
+**Evaluation.** `cv` shuffles the training rows with the preset's `seed` (42) and splits them into `k_folds` (5) folds, the same for every preset. For each fold, it fits the whole pipeline (encoding, model and threshold) on the other four folds and scores the held-out one. It reports the mean ± standard deviation over the folds of:
+- F1, the competition metric;
+- accuracy;
+- ROC AUC, the probability that a random positive gets a higher score than a random negative (it does not depend on the threshold).
+
+It prints a table ranked by F1 and appends a row per preset to `outputs/cv_results.csv`.
+
+**Results** of `uv run p1 cv configs/step2/*.toml baseline` (5-fold CV on all 328,135 training rows, about 15 minutes on 16 cores):
+
+| Preset | F1 | Accuracy | ROC AUC | Threshold | Time (5 folds) |
+|---|---|---|---|---|---|
+| `logistic` | 0.4390 ± 0.0027 | 0.880 | 0.864 | 0.23 | 5.0 min |
+| `reg_logistic` | 0.4388 ± 0.0022 | 0.878 | 0.864 | 0.23 | 4.7 min |
+| `least_squares` | 0.4301 ± 0.0018 | 0.875 | 0.857 | 0.22 | 38 s |
+| `ridge` | 0.4297 ± 0.0031 | 0.879 | 0.858 | 0.23 | 36 s |
+| `mse_gd` | 0.4289 ± 0.0022 | 0.876 | 0.858 | 0.21 | 1.8 min |
+| `mse_sgd` | 0.4255 ± 0.0033 | 0.875 | 0.855 | 0.22 | 57 s |
+| `baseline`: least squares on the raw values (NaN → median) | 0.4095 ± 0.0019 | 0.867 | 0.845 | 0.22 | 10 s |
+
+Logistic regression beats least squares on every fold (+0.009 F1), but the encoding matters more: with least squares, going from the raw values to the encoding above gains 0.021. Training on all rows (`train`) needs about 13 GB of RAM.
+
+**Threshold.** Only 8.8% of the labels are positive, so predicting 1 from a score of 0.5 misses most positives: F1 is then 0.26 for logistic regression and 0.16 for least squares, instead of 0.44 and 0.43. With `threshold = "auto"`, the default, each model picks after training the threshold that maximizes F1 on its own training rows. The held-out fold is never used for it, and the result is within 0.002 F1 of the best threshold for the held-out fold. A fixed value can be set instead, for example `--set model.threshold=0.5`.
+
+**Step sizes.** On this encoding, gradient descent on the MSE is stable for γ < 2/λ_max(XᵀX/N) = 2/63 ≈ 0.032, and on the logistic loss for γ < 8/63 ≈ 0.13 (the presets use 0.02 and 0.1). SGD diverges from γ = 1e-4: a few rows with rare answers have very large norms after standardization, so the preset uses γ = 5e-6. A step size that is too large gives a poor F1, or, once the weights overflow to inf or NaN, the warning "the weights diverged".
+
 ## Part 3: presets
 
 A preset in `configs/` describes one pipeline: transforms applied in order, then a model.
@@ -99,6 +168,8 @@ uv run run.py                                    # rebuild the best submission (
 
 - `cv` prints a ranked table and appends every result to `outputs/cv_results.csv`. Presets can also be paths, e.g. `uv run p1 cv configs/ablation/*.toml`.
 - `train` ignores `[grid]`: write the winning values into the preset.
+- Transforms, each fitted on the training rows only: `impute_median` (option `indicators`), `onehot` (`min_count`, `max_levels`), `log1p`, `standardize`, `poly` (`degree`), `whiten`. A `columns` option limits a step to some features: a list of names, or the group `numeric`, `categorical` or `heavy_tailed`. Steps with `columns` must come before `onehot` and `whiten`, which move columns.
+- Models: `least_squares`, `ridge` (`lambda_`), `mse_gd`, `mse_sgd`, `logistic` (`max_iters`, `gamma`), `reg_logistic` (`lambda_`, `max_iters`, `gamma`). They all accept `threshold` (default `"auto"`, see step 2).
 - To add a transform or a model, write its class in `p1/transforms.py` or `p1/models.py` and register it in `TRANSFORMS` or `MODELS`.
 - Labels are {0, 1} in the code and {-1, 1} only in submission files.
 - `configs/best.toml` holds the preset of the best submission: do not edit it after submitting.
@@ -108,6 +179,9 @@ uv run run.py                                    # rebuild the best submission (
 ```bash
 uv run black .   # the grader checks that every .py file is black-formatted
 uv run pytest grading_tests --github_link . -k "not black and not todo and not github_link"
+# the same tests of implementations.py with the grader's Python 3.9 and NumPy 1.23.1:
+uv run --isolated --no-project --python 3.9 --with numpy==1.23.1 --with pytest --with gitpython \
+  pytest grading_tests --github_link . -k "not black and not todo and not github_link"
 ```
 
 All course tests, in the grader's environment (Python 3.9, NumPy 1.23.1, black 22.6), on a pushed commit:

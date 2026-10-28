@@ -6,19 +6,23 @@ Last updated: 2026-10-28. Deadline: Thursday 2026-10-29, 16:00.
 
 | Part | State | Notes |
 |---|---|---|
-| Repo structure | done | skeleton from `STRUCTURE.md`; the part-3 function bodies in `p1/` are still `pass` |
-| Step 2: `implementations.py` | buggy | 6 of 25 public tests fail, see `STRUCTURE.md` §7 |
+| Repo structure | done | from `STRUCTURE.md`; every module of `p1/` is implemented |
+| Step 2: `implementations.py` | **done** | 25/25 public tests pass, also with Python 3.9 + NumPy 1.23.1; fixes listed in `STRUCTURE.md` §7 |
+| Step 2: run and evaluate the six methods | **done** | presets `configs/step2/*.toml`, `uv run p1 cv configs/step2/*.toml`; README section "Step 2"; results under Key findings |
 | Part 1: EDA | **done** | `notebooks/01_eda.ipynb` (executed), details in `docs/eda_findings.md` |
 | Part 2: cleaning | **done** | `p1/cleaning.py`, `notebooks/02_cleaning.ipynb` (executed) → `data/processed/clean.npz`: 291 features, 56 numeric (`cleaning.NUMERIC`) and 235 categorical |
-| Part 3: transforms, models, pipeline, CV, CLI | not started | stubs |
-| `run.py`, `configs/best.toml` | not started | |
+| Part 3: transforms, models, pipeline, CV, CLI | infrastructure done | everything runs (`p1 cv/train/predict`); still to do: a better solver (Newton logistic), the ablation presets, `03_results.ipynb` |
+| `run.py`, `configs/best.toml` | not started | stubs, waiting for the first submission |
 | Report | not started | figures ready in `report/figures/`: `eda_*.pdf`, `clean_numeric_auc.pdf` |
 | AIcrowd submissions | none yet | |
 
 Implemented so far in `p1/`:
 - `data.py`: `load_raw()` extracts the CSVs from the zip if missing, parses them with `helpers.load_csv_data`, and caches them in `data/processed/raw.npz` (about 0.5 s to load, 37 s the first time). `load_clean()` reads `clean.npz` (0.9 s), raises `FileNotFoundError` if it is missing and warns if `p1/cleaning.py` is newer. `save_dataset()` writes either file. `write_submission()` maps {0, 1} to {-1, 1} and calls `helpers.create_csv_submission`.
 - `cleaning.py`: `clean(x, feature_names)` (pure, 0.35 s on the training set) and `build_clean_dataset()` (2.3 s, writes the 1 GB `clean.npz`). The rules are module constants (`DROPPED`, `CODES`, the activity lists). For part 3: `NUMERIC` (the 56 features to use as numbers; all others are categorical codes) and `HEAVY_TAILED` (33 of them, counts with long tails, for `log1p`).
-- `eda.py`: helpers for the notebooks: `use_style`, `missing_fraction`, `positive_rate_by_value`, `roc_auc`, `univariate_auc`, `duplicate_columns`, `correlated_pairs`, `onehot_encode`, `ridge_probe`, `f1_by_threshold`, `print_table`, `save_figure` (reproducible PDFs). Part-3 code must not import it, but `roc_auc` and `f1_by_threshold` are worth copying into `evaluation.py`.
+- `eda.py`: helpers for the notebooks: `use_style`, `missing_fraction`, `positive_rate_by_value`, `roc_auc`, `univariate_auc`, `duplicate_columns`, `correlated_pairs`, `onehot_encode`, `ridge_probe`, `f1_by_threshold`, `print_table`, `save_figure` (reproducible PDFs). Part-3 code must not import it (`metrics.py` has its own copies of `roc_auc` and the F1-by-threshold logic).
+- `transforms.py`: `impute_median` (`columns`, `indicators`), `onehot` (`columns`, `min_count=30`, `max_levels=100`, NaN column), `log1p`, `standardize`, `poly`, `whiten`. A `columns` option takes feature names or a group (`numeric`, `categorical`, `heavy_tailed`), resolved by `pipeline.build_pipeline`.
+- `models.py`: one class per `implementations.py` function (`least_squares`, `ridge`, `mse_gd`, `mse_sgd`, `logistic`, `reg_logistic`), zero initial weights. `threshold = "auto"` (default) picks the F1-optimal threshold on the training rows' own scores. Fitted state: `w_` (bias first), `loss_`, `threshold_`.
+- `pipeline.py` (`Pipeline`, `build_pipeline`), `metrics.py` (`f1_score`, `accuracy`, `roc_auc`, `best_threshold`), `evaluation.py` (`kfold_indices`, `cross_validate` → F1, accuracy, AUC, threshold), `config.py` (presets, `--set` overrides, `[grid]`), `cli.py` (`p1 cv | train | predict`).
 
 ## Key findings (details: `docs/eda_findings.md`)
 
@@ -31,8 +35,11 @@ Implemented so far in `p1/`:
 - **Value of part 2**: it fixes the numeric features (a model on them alone: F1 0.339 → 0.345), but inside the one-hot encoding E it changes nothing measurable (paired 5-fold F1 0.4404 with raw numeric codes vs 0.4401 clean, difference −0.0003 ± 0.0009; `log1p` also neutral). E on `clean.npz` reproduces the EDA's best: 5-fold F1 0.440 ± 0.002, AUC 0.864.
 - **Threshold** ≈ 0.20 for logistic regression (F1 at 0.5 is only about 0.27): tune it in CV. Class weights and undersampling only shift it.
 - Logistic regression is enough: an MLP and interactions gained ≤ 0.002 F1.
-- The one-hot design is singular, so least squares via `np.linalg.solve` fails: use ridge (λ > 0) or reference levels.
-- Plain GD for logistic regression on the standardized one-hot features: γ ≈ 0.07, 300+ iterations.
+- The one-hot design is singular, so least squares via `np.linalg.solve` fails; `implementations.least_squares` uses the pseudo-inverse instead (same F1 as ridge with λ = 1e-8).
+- **Step 2, the six methods** (5-fold CV on all rows, encoding of `configs/step2/`, same folds): logistic 0.4390 ± 0.0027 (AUC 0.864), reg. logistic 0.4388 ± 0.0022, least squares 0.4301 ± 0.0018 (AUC 0.857), ridge 0.4297 ± 0.0031, MSE GD 0.4289 ± 0.0022, SGD 0.4255 ± 0.0033; `baseline` (least squares on the raw values, NaN → median) 0.4095 ± 0.0019 (AUC 0.845). Logistic beats least squares on every fold (+0.009); the encoding gains +0.021 for least squares. The logistic GD result matches the EDA's Newton fit (0.4398), so the pipeline reproduces the scratch experiments.
+- Learned thresholds are 0.21–0.23 for every method. At 0.5 the F1 is 0.26 (logistic) and 0.16 (least squares).
+- GD on the standardized encoding: λ_max(XᵀX/N) = 63.3, so MSE GD needs γ < 0.032 and logistic γ < 0.126 (γ = 0.25 also converged in practice). MSE GD reaches the least-squares F1 in 100 steps. Logistic GD gives the same F1 after 300 and 1000 steps (0.18 s per step on 262k × 1,527). SGD diverges from γ = 1e-4: squared row norms reach 5·10⁵ (rare one-hot levels after standardization).
+- Cost: a 5-fold CV of the logistic preset takes 5 min; `train` on all rows takes 74 s and peaks at 13 GB of RAM; the saved pipeline is 59 KB.
 - With 25% of the rows F1 drops by 0.013: compare pipelines with `subsample` ≥ 0.5.
 
 ## Decisions
@@ -42,16 +49,20 @@ Implemented so far in `p1/`:
 - Skip-logic fills: `POORHLTH` → 0 when `PHYSHLTH` = `MENTHLTH` = 88; drinks → 0 only when `ALCDAY5` = 888 (not when it is unknown); the 10 activity amounts per week → 0 when `EXERANY2` = 2, and the second activity's → 0 when `EXRACT21` = 88.
 - Part 3 splits the features with `cleaning.NUMERIC` (numbers: NaN indicator + median, standardize) vs the rest (one-hot with a NaN column); `log1p` on `cleaning.HEAVY_TAILED` is optional.
 - The core model is L2 logistic regression with a threshold tuned in CV.
+- The decision threshold is learned with the model (`threshold = "auto"`): the F1-optimal threshold on the training rows' own scores. CV refits it on each training split, so the reported F1 never uses the validation fold, and `train` saves it with the model. On fold 1 it lands within 0.002 F1 of the oracle threshold tuned on the validation fold, for every method, so nested CV is not needed.
+- `least_squares` solves the normal equations with `np.linalg.pinv` (allowed; only `lstsq` is banned), so it runs on the singular one-hot design and gives the minimum-norm solution. On well-posed inputs it equals `np.linalg.solve`.
+- The step-2 presets share one encoding: `impute_median` (numeric, with indicators) → `onehot` (categorical) → `standardize`, 1,526 columns per training fold. Hyper-parameters, from a sweep on fold 1: ridge λ = 1e-3 (λ barely matters); MSE GD γ = 0.02, 100 iterations; SGD γ = 5e-6, 10⁶ steps; logistic GD γ = 0.1, 300 iterations; reg. logistic λ = 1e-3 (1e-2 starts to hurt).
+- Metrics live in `p1/metrics.py`, which imports nothing from `p1`: `models` needs `best_threshold`, and putting it in `evaluation.py` would create the cycle evaluation → pipeline → models → evaluation.
 - Notebooks are executed with `uv run --with nbconvert jupyter nbconvert --to notebook --execute --inplace notebooks/<name>.ipynb` (nbconvert is not a project dependency).
 
 ## Next steps (in priority order)
 
-1. Fix `implementations.py` (`STRUCTURE.md` §7, ask the user first): return `(w, loss)` everywhere, SGD with the exact signature and batch size 1, the `calculate_mse` calls, no per-iteration prints. Rerun the public tests.
-2. Part 3: transforms (`onehot` over the non-`NUMERIC` features with a NaN column, NaN indicator + median imputation for `NUMERIC`, optional `log1p` for `HEAVY_TAILED`, `standardize`), the 6 models plus threshold tuning, pipeline, `evaluation.py` (F1, k-fold, threshold choice inside CV), config and CLI. A Newton (IRLS) logistic regression is a cheap exact solver. Expected 5-fold F1 ≈ 0.440.
-3. First AIcrowd submission, `configs/best.toml`, `run.py` (calls `build_clean_dataset()` then `load_clean()`).
-4. Ablation presets for the report, then the report. Build the ablation around the encoding (raw numbers → one-hot → NaN indicators → threshold): with one-hot the cleaning adds nothing, and the EDA's "codes cleaned" step needs the categorical don't-know codes turned into NaN, which part 2 does not do (`docs/eda_findings.md` §7–8).
+1. First AIcrowd submission: `outputs/submissions/logistic.csv` is ready (written by `uv run p1 train step2/logistic` and `uv run p1 predict logistic`, CV F1 0.439; not yet submitted). After submitting, copy `configs/step2/logistic.toml` into `configs/best.toml` and write `run.py` (`build_clean_dataset()` → `load_clean()` → `load_config("best")` → fit on all rows → `outputs/submissions/best.csv`).
+2. Part 3 models: a Newton (IRLS) logistic regression as a new model in `models.py` (the exact optimum in about 10 iterations, the EDA's 5-fold F1 ≈ 0.440, vs ≈ 0.438 for 300 GD steps). Then try `log1p` on `heavy_tailed`, the `HAREHAB1` → 1 rule, and interactions; each needs a paired CV comparison (fold noise ±0.004).
+3. Ablation presets for the report, then the report. Build the ablation around the encoding (raw numbers → one-hot → NaN indicators → threshold): with one-hot the cleaning adds nothing, and the EDA's "codes cleaned" step needs the categorical don't-know codes turned into NaN, which part 2 does not do (`docs/eda_findings.md` §7–8). `configs/baseline.toml` (raw numbers, least squares) is the first row; the step-2 table compares the six methods.
 
 ## Session log
 
 - 2026-10-27: added `CLAUDE.md` and `PROGRESS.md`. Did the EDA: implemented `data.load_raw` and `p1/eda.py`, wrote and executed `notebooks/01_eda.ipynb` (4 figures saved in `report/figures/`), wrote `docs/eda_findings.md` (rule for every feature, experiment results). Scratch experiment scripts were not kept.
 - 2026-10-27/28: Part 2: implemented `p1/cleaning.py` (every numeric rule checked against the codebook, which corrected several EDA rules), `data.load_clean`, `save_dataset` and `write_submission`, and wrote and executed `notebooks/02_cleaning.ipynb` (figure `clean_numeric_auc.pdf`). Measured that the cleaning helps numeric-only models but not the one-hot encoding (paired 5-fold CV). Scratch scripts were not kept.
+- 2026-10-28: Step 2: fixed `implementations.py` (25/25 public tests, also on Python 3.9 + NumPy 1.23.1; extra fixes for SGD speed, logistic NaN and overflow); implemented the part-3 modules (`transforms`, `models`, `pipeline`, new `metrics`, `evaluation`, `config`, `cli`); wrote the presets `configs/step2/` after a hyper-parameter sweep on fold 1; ran the 5-fold CV of the six methods plus `baseline` (results in Key findings, rows in `outputs/cv_results.csv`); trained `step2/logistic` and wrote `outputs/submissions/logistic.csv`; added the README section "Step 2" and updated `STRUCTURE.md`. Scratch scripts were not kept.

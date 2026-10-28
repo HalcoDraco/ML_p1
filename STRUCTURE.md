@@ -25,6 +25,7 @@ ML_p1/
 │   └── 03_results.ipynb     # optional: tables/plots of CV results for the report
 │
 ├── configs/                 # PART 3 presets: one pipeline (transforms + model) per file
+│   ├── step2/               # the six implementations.py methods on the same encoding
 │   ├── baseline.toml
 │   ├── ridge_poly.toml
 │   └── best.toml            # frozen config of the best submission (used by run.py)
@@ -38,7 +39,8 @@ ML_p1/
 │   ├── transforms.py        # part 3.1: fitted steps (impute, standardize, whiten, poly…)
 │   ├── models.py            # part 3.2: predictors (the 6 mandatory ones + better ones)
 │   ├── pipeline.py          # Pipeline = transforms + model, built from a preset
-│   ├── evaluation.py        # F1 / accuracy, k-fold cross-validation
+│   ├── metrics.py           # F1, accuracy, ROC AUC, F1-optimal threshold
+│   ├── evaluation.py        # k-fold cross-validation
 │   ├── config.py            # read presets, apply overrides, expand grids
 │   └── cli.py               # PART 3 entrypoint: `uv run p1 cv | train | predict`
 │
@@ -116,7 +118,7 @@ uv run run.py                                    # reproduce the best submission
 
 Details for building the structure (written for Claude). You can stop reading above.
 
-**Status (2026-10-27):** steps 1–6 are done as a skeleton: every function body is `pass`, and `uv run p1 …`, `uv run run.py` and the notebooks run without errors. Since then `data.py`, `cleaning.py` and `eda.py` have been implemented (parts 1 and 2). `implementations.py` has absorbed `utils.py` and is black-formatted, but its code is unchanged: the per-iteration prints (step 2) and the bugs in §7 are still to fix.
+**Status (2026-10-28):** steps 1–6 are done. Every module of `p1/` is implemented (`data`, `cleaning`, `eda` for parts 1–2; `transforms`, `models`, `pipeline`, `metrics`, `evaluation`, `config`, `cli` for step 2 and part 3), and `implementations.py` is fixed (§7). Still stubs: `run.py` and `configs/best.toml` (they wait for the best submission).
 
 **Ground rules:** never commit; the user does that. Use `git mv` on tracked files so history follows them. Every `.py` file must be black-formatted with default settings and must not contain "todo" in any casing, because the grading tests scan every `.py` in the repo. It's a plain substring check, so the Spanish word "todo/todos" in a comment also fails.
 
@@ -188,26 +190,28 @@ Modules:
 - `cleaning.py`: `clean(x, feature_names) -> (x, feature_names)` is pure and deterministic, fits nothing, and is applied identically to train and test (321 → 291 columns, input order kept). `build_clean_dataset()`: `load_raw` → `clean` both → save `CLEAN_DATA`. The rules are module constants: `DROPPED` (= `SURVEY_DESIGN + EXACT_COPIES + MIXED_UNITS`), `CODES` (numeric code → value), the activity lists for the skip fills. For part 3 it also exports `NUMERIC` (the 56 clean features to use as numbers; all others are categorical codes to one-hot) and `HEAVY_TAILED` (33 of them, for `log1p`).
 - `eda.py`: matplotlib and summary helpers for the notebooks. Part-3 code never imports it.
 - `transforms.py`:
-  - Base `Transform` with `fit(x, y=None) -> self` (no-op by default), `transform(x)` and `fit_transform`.
+  - Base `Transform` with `fit(x, y=None) -> self` (no-op by default), `transform(x)` and `fit_transform`. Transforms never modify their input.
   - Hyper-parameters are `__init__` kwargs (= preset keys). Fitted state lives in trailing-underscore attributes (`self.mean_`).
-  - Start with `impute_median`, `standardize`, `whiten` and `poly` (per-feature powers, no cross terms). At the bottom: `TRANSFORMS = {"standardize": Standardize, ...}`.
+  - Implemented: `impute_median` (`columns`, `indicators`: append a 0/1 column per imputed column that has NaNs in training), `onehot` (`columns`, `min_count=30`, `max_levels=100`: one column per value seen ≥ `min_count` times plus one for NaN; rarer and unseen values are all-zero; the unencoded columns come first), `log1p` (`columns`), `standardize` (constant columns are only centered), `poly` (`degree`, `columns`: per-feature powers, no cross terms), `whiten` (`rtol`: PCA whitening that drops near-zero-variance directions). At the bottom: `TRANSFORMS = {"standardize": Standardize, ...}`.
+  - A `columns` option holds indices (`build_pipeline` converts names); None means all columns. The class attribute `moves_columns` is True for steps that remove or reorder columns (`onehot`, `whiten`); appending columns (`poly`, indicators) does not count.
 - `models.py`:
-  - Base `LinearModel(threshold=0.5)`. `fit(x, y)` prepends the bias column and calls `_fit_weights(y, tx) -> w`. `predict_score(x)` (logistic models apply the sigmoid). `predict(x) = (score >= threshold).astype(int)`.
-  - One subclass per mandatory function, calling `implementations.*` with `initial_w = zeros`. Non-linear models only need `fit`/`predict_score`/`predict`.
+  - Base `LinearModel(threshold="auto")`. `fit(x, y)` prepends the bias column, calls `_fit_weights(y, tx) -> (w, loss)` and stores `w_` (bias first) and `loss_`, then `threshold_`: the given number, or with `"auto"` the F1-optimal threshold on the training rows' own scores (`metrics.best_threshold`), so CV never tunes it on the validation fold. It warns if the weights diverged (inf/NaN). `predict_score(x) = x @ w_[1:] + w_[0]` (no bias copy; logistic models apply the sigmoid). `predict(x) = (score >= threshold_).astype(int)`.
+  - One subclass per mandatory function, calling `implementations.*` with `initial_w = zeros`. Non-linear models only need `fit`/`predict_score`/`predict` and `threshold_`.
   - At the bottom: `MODELS` maps `least_squares, ridge, mse_gd, mse_sgd, logistic, reg_logistic, …` to their classes.
 - `pipeline.py`:
   - `Pipeline(transforms, model, seed)`. `fit` starts with `np.random.seed(seed)` (the mandatory SGD uses NumPy's global RNG), then fit_transforms each step and fits the model. It also has `predict` and `predict_score`.
   - `build_pipeline(config, feature_names=None)`: a string item becomes the class with defaults, a table item becomes `name` + kwargs, and an unknown name raises an error listing the valid names.
-  - Transforms with a `columns` option (feature names) get those resolved to indices here, and must come before any step that changes the number of columns.
+  - A `columns` option is resolved to indices here by `column_indices`: a list of feature names, or a group: `numeric` (`cleaning.NUMERIC`), `heavy_tailed` (`cleaning.HEAVY_TAILED`), `categorical` (every other feature). A step with `columns` after a step with `moves_columns` raises a `ValueError`.
   - Training-only row operations (e.g., undersampling negatives) go in `Pipeline.fit` via a preset key, never in a transform, because transforms also run at inference.
-- `evaluation.py`: `f1_score`, `accuracy`, `kfold_indices(n, k, seed)`, `cross_validate(config, ds) -> {f1_mean, f1_std, acc_mean, acc_std, seconds}` with a fresh pipeline per fold. The same seed gives the same folds for every config (a paired comparison for ablations).
+- `metrics.py` (imports nothing from `p1`, so `models` can use it without an import cycle through `evaluation` → `pipeline` → `models`): `f1_score`, `accuracy`, `roc_auc` (rank formula, ties count one half), `best_threshold(score, y)` (F1-optimal threshold, every distinct score tried).
+- `evaluation.py`: `kfold_indices(n, k, seed, fraction=1.0)` (the seed's permutation, its first `fraction` kept, `np.array_split` into `k` folds), `cross_validate(config, ds, verbose=False) -> {f1_mean, f1_std, acc_mean, acc_std, auc_mean, auc_std, threshold_mean, seconds}` with a fresh pipeline per fold. The same seed gives the same folds for every config (a paired comparison for ablations). Standard deviations are over folds (`np.std`, ddof 0).
 - `config.py`:
   - `DEFAULTS = {seed: 42, k_folds: 5, subsample: 1.0, transforms: []}`. `subsample` is the fraction of training rows that `cv` uses, for quick iterations.
   - `load_config(arg)`: a `*.toml` argument is a path, anything else means `configs/<arg>.toml`. The result is merged over the defaults; `name` defaults to the file stem.
   - `apply_overrides(config, ["a.b=v", ...])`: parse the value as TOML (`tomllib.loads(f"v = {raw}")["v"]`) and fall back to a string. Checked: `0.1`, `3`, `[1, 2]` and `ridge` all parse as intended. Key paths are top-level keys, `model.<key>` and `transforms.<name>.<key>` (a string item is promoted to a table).
   - `expand_grid(config) -> list[dict]`: cartesian product of `[grid]`, with variants named like `ridge_poly[degree=2,lambda_=0.001]`. Without a grid it returns `[config]`.
 - `cli.py`: argparse subcommands. The command functions (`run_cv`, `train`, `predict`) are importable.
-  - `cv PRESET... [--set K=V]...`: load the data once. For each preset: load → override → expand → `cross_validate`. Print a ranked table and append rows to `CV_RESULTS` (columns `timestamp, name, f1_mean, f1_std, acc_mean, acc_std, k_folds, subsample, seconds, config`, with `config` as JSON).
+  - `cv PRESET... [--set K=V]...`: load the data once. For each preset: load → override → expand → `cross_validate` (printing each fold). Append each row to `CV_RESULTS` as soon as it is computed (columns `timestamp, name, f1_mean, f1_std, acc_mean, acc_std, auc_mean, auc_std, threshold_mean, k_folds, subsample, seconds, config`, with `config` as JSON), then print a table ranked by F1.
   - `train PRESET... [--set K=V]...`: print that `[grid]` is ignored, fit on all the training data, pickle to `MODELS_DIR/<name>.pkl`, and write the resolved config to `<name>.json`.
   - `predict NAME...`: unpickle, predict `x_test`, write `SUBMISSIONS_DIR/<name>.csv`.
 - `run.py`: keep it readable top to bottom, because graders read it. `build_clean_dataset()` → `load_clean()` → `load_config("best")` → `build_pipeline` → fit on all training data → write `outputs/submissions/best.csv` and print the path. It retrains instead of loading a pickle: retraining is fast for linear models, and NumPy-2 pickles don't load under NumPy 1.x. The README should say to run it with `uv run run.py` (uv fetches a suitable Python); plain `python run.py` needs Python ≥ 3.11 + NumPy.
@@ -218,7 +222,8 @@ Modules:
 - `implementations.py`:
   - Use the exact Table 1 signatures and return `(w, loss)`, where `loss` is a 0-d float computed for the returned `w` (also when `max_iters = 0`).
   - The ridge and reg-logistic loss excludes the penalty term. SGD uses batch size 1.
-  - Docstrings on every function, no `np.linalg.lstsq`, 1-D arrays.
+  - Docstrings on every function, no `np.linalg.lstsq`, 1-D arrays. `least_squares` solves the normal equations with `np.linalg.pinv(..., hermitian=True)` (allowed: everything in `numpy.linalg` except `lstsq`), because `solve` raises on the singular one-hot design; it equals `solve` on well-posed inputs.
+  - Iterative methods compute the loss once, after the loop. Computing the full loss at every SGD step costs O(N·D) per step and made SGD unusable on 262k rows. The logistic loss uses `log(1 + exp(z)) - y z` (`np.logaddexp`), which stays finite when a prediction saturates at 0 or 1, and `sigmoid` uses the same trick to avoid overflow.
 - The README must document data preparation, feature generation and the CV procedure.
 
 ### 6. Checks
@@ -233,9 +238,10 @@ uv run --isolated --no-project --python 3.9 --with numpy==1.23.1 --with pytest -
 ```
 With a local path, the black and todo tests would also scan `.venv/`, so run those two against the GitHub URL or a fresh clone.
 
-### 7. Found while planning (bug fixes, outside the restructure: ask before fixing)
-Right now the official tests give 6 failed, 19 passed, the same with Python 3.9 + NumPy 1.23.1 (black 22.6 and the todo check pass):
+### 7. Found while planning (fixed on 2026-10-28)
+All 25 public tests now pass, also with Python 3.9 + NumPy 1.23.1. Before the fix they gave 6 failed, 19 passed:
 - `mean_squared_error_gd` returns `(losses, w)` instead of `(w, loss)`.
 - `mean_squared_error_sgd` has an extra `batch_size` parameter; the required signature is `(y, tx, initial_w, max_iters, gamma)` with batch size 1. It also calls `calculate_mse(y, tx, w)`, but that helper takes the error vector.
 - `least_squares` makes the same wrong `calculate_mse` call, which raises a `TypeError`.
 - `ridge_regression` returns only `w`.
+- Not caught by the tests, also fixed: SGD computed the full-data loss at every step; the logistic loss was NaN once a prediction saturated (0 · log 0); `sigmoid` overflowed for large negative scores; the per-iteration prints; the loss of GD and logistic GD was computed at every iteration instead of once at the end. The unused `calculate_mae` and a commented-out Hessian were removed.
