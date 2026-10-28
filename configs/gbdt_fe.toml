@@ -1,0 +1,32 @@
+# The tuned GBDT (gbdt_tuned.toml) with two feature transforms and learning
+# rate 0.02, each checked by paired CV on 15 folds (docs/part3_results.md, §7):
+# - counts per row: missing answers; yes, no, don't know and refused answers
+#   to the yes/no questions; chronic conditions (yes, don't know) and
+#   disabilities. Trees need many splits to add answers up.
+# - target order: the codes of the categorical answers recoded by their
+#   positive rate in the training rows, so one split can group answers of
+#   similar risk. The counts come first, while the codes are still codes.
+transforms = [
+    { name = "count_code", code = "nan" },
+    { name = "count_code", columns = "yes_no", code = 1 },
+    { name = "count_code", columns = "yes_no", code = 2 },
+    { name = "count_code", columns = "yes_no", code = 7 },
+    { name = "count_code", columns = "yes_no", code = 9 },
+    { name = "count_code", columns = "chronic", code = 1 },
+    { name = "count_code", columns = "chronic", code = 7 },
+    { name = "count_code", columns = "disability", code = 1 },
+    { name = "target_order", columns = "categorical", smooth = 50 },
+]
+
+[model]
+name = "gbdt"
+categorical = []  # every feature split in the order of its values
+n_trees = 2000
+learning_rate = 0.02
+depth = 5
+lambda_ = 10.0
+min_child_hessian = 5.0
+row_fraction = 0.7
+feature_fraction = 0.3
+max_bins = 64
+seed = 0

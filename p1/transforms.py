@@ -211,6 +211,85 @@ class OneHot(Transform):
         return np.hstack(blocks)
 
 
+class CountCode(Transform):
+    """Append, for each row, how many of the chosen columns hold `code`.
+
+    A tree splits on one feature at a time, so it needs many splits to add up
+    answers, such as the number of chronic conditions a respondent reports;
+    as one column, a single split uses the sum.
+
+    Args:
+        columns: Columns to count in; all if None.
+        code: Value to count, or "nan" to count the missing values.
+    """
+
+    def __init__(
+        self, columns: list[int] | None = None, code: float | str = "nan"
+    ) -> None:
+        self.columns = columns
+        self.code = code
+
+    def transform(self, x: np.ndarray) -> np.ndarray:
+        """Return `x` with the count column appended."""
+        part = x[:, _indices(self.columns, x)]
+        hits = np.isnan(part) if self.code == "nan" else part == self.code
+        return np.column_stack([x, hits.sum(axis=1)])
+
+
+class TargetOrder(Transform):
+    """Recode the values of the chosen columns by their positive rate in training.
+
+    Meant for categorical answers fed to a GBDT that splits every feature in
+    the order of its values: one split can then separate any group of answers
+    of similar risk (such as "yes" and "don't know" against "no"), which the
+    order of the codes does not allow. The order is fixed once per fit, unlike
+    a sort of the levels in every tree node, which overfits. Each rate is
+    smoothed towards the overall rate by `smooth` pseudo-rows, so that rare
+    values stay near the middle. Missing values stay missing, and values not
+    seen in training get the overall rate.
+
+    Args:
+        columns: Columns to recode; all if None.
+        smooth: Pseudo-rows at the overall positive rate added to every value.
+    """
+
+    def __init__(self, columns: list[int] | None = None, smooth: float = 50.0) -> None:
+        self.columns = columns
+        self.smooth = smooth
+
+    def fit(self, x: np.ndarray, y: np.ndarray | None = None) -> Self:
+        """Store the values of each column and their smoothed positive rates."""
+        if y is None:
+            raise ValueError("target_order needs the training labels")
+        y = np.asarray(y, dtype=float)
+        self.columns_ = _indices(self.columns, x)
+        self.prior_ = float(y.mean())
+        self.values_, self.rates_ = [], []
+        for j in self.columns_:
+            observed = ~np.isnan(x[:, j])
+            values, index = np.unique(x[observed, j], return_inverse=True)
+            rows = np.bincount(index, minlength=len(values))
+            positives = np.bincount(index, weights=y[observed], minlength=len(values))
+            self.values_.append(values)
+            self.rates_.append(
+                (positives + self.smooth * self.prior_) / (rows + self.smooth)
+            )
+        return self
+
+    def transform(self, x: np.ndarray) -> np.ndarray:
+        """Return a copy of `x` with the chosen columns recoded."""
+        out = x.copy()
+        for j, values, rates in zip(self.columns_, self.values_, self.rates_):
+            observed = ~np.isnan(x[:, j])
+            if len(values) == 0:  # missing in every training row
+                out[observed, j] = self.prior_
+                continue
+            v = x[observed, j]
+            pos = np.minimum(np.searchsorted(values, v), len(values) - 1)
+            out[observed, j] = np.where(values[pos] == v, rates[pos], self.prior_)
+        return out
+
+
 def _indices(columns: list[int] | None, x: np.ndarray) -> np.ndarray:
     """Return `columns` as an index array, or every column of `x` if None."""
     return np.arange(x.shape[1]) if columns is None else np.asarray(columns, dtype=int)
@@ -223,4 +302,6 @@ TRANSFORMS: dict[str, type[Transform]] = {
     "poly": Polynomial,
     "log1p": Log1p,
     "onehot": OneHot,
+    "count_code": CountCode,
+    "target_order": TargetOrder,
 }

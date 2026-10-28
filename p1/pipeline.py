@@ -109,23 +109,30 @@ def column_indices(
     """Return the indices, in feature order, of a column group or list of names.
 
     The groups are "numeric" (`cleaning.NUMERIC`), "heavy_tailed"
-    (`cleaning.HEAVY_TAILED`) and "categorical" (every feature not numeric).
+    (`cleaning.HEAVY_TAILED`), "categorical" (every feature not numeric), and
+    "yes_no", "chronic" and "disability" (`cleaning.YES_NO`, `CHRONIC` and
+    `DISABILITY`).
 
     Raises:
         ValueError: If the names are missing, or a group or name is unknown.
     """
+    groups = {
+        "numeric": cleaning.NUMERIC,
+        "heavy_tailed": cleaning.HEAVY_TAILED,
+        "yes_no": cleaning.YES_NO,
+        "chronic": cleaning.CHRONIC,
+        "disability": cleaning.DISABILITY,
+    }
     if feature_names is None:
         raise ValueError("a `columns` option needs the feature names")
-    if columns == "numeric":
-        names = cleaning.NUMERIC
-    elif columns == "heavy_tailed":
-        names = cleaning.HEAVY_TAILED
-    elif columns == "categorical":
+    if columns == "categorical":
         names = [name for name in feature_names if name not in cleaning.NUMERIC]
+    elif isinstance(columns, str) and columns in groups:
+        names = groups[columns]
     elif isinstance(columns, str):
         raise ValueError(
-            f"unknown column group '{columns}': use numeric, categorical, "
-            "heavy_tailed or a list of feature names"
+            f"unknown column group '{columns}': use categorical, "
+            f"{', '.join(groups)} or a list of feature names"
         )
     else:
         names = columns
