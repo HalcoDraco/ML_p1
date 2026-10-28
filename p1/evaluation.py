@@ -1,10 +1,13 @@
+import json
 import time
+from typing import Any
 
 import numpy as np
 
+from p1 import ensemble
 from p1.config import Config
-from p1.data import Dataset
-from p1.metrics import accuracy, f1_score, roc_auc
+from p1.data import Dataset, drop_features
+from p1.metrics import best_threshold, f1_score, log_loss, roc_auc
 from p1.pipeline import build_pipeline
 
 
@@ -19,54 +22,98 @@ def kfold_indices(n: int, k: int, seed: int, fraction: float = 1.0) -> list[np.n
 
 
 def cross_validate(
-    config: Config, ds: Dataset, verbose: bool = False
-) -> dict[str, float]:
+    config: Config,
+    ds: Dataset,
+    verbose: bool = False,
+    folds: list[int] | None = None,
+) -> dict[str, Any] | None:
     """Estimate a preset's scores by k-fold cross-validation on the training data.
 
     A new pipeline is fitted on each training split, so its transforms and its
     decision threshold never see the validation fold. With the same `seed`,
-    every preset uses the same folds.
+    every preset uses the same folds. Each fold's scores are saved to a fold
+    file (`run_fold`), so the folds can also run as separate jobs.
 
     Args:
-        config: Preset to evaluate. Uses its `k_folds`, `seed` and `subsample`.
+        config: Preset to evaluate. Uses its `k_folds`, `seed`, `subsample`
+            and `drop`.
         ds: Clean dataset.
         verbose: Print the F1 score of each fold as it is computed.
+        folds: Indices of the folds to run; all of them if None.
 
     Returns:
-        The mean and standard deviation over the folds of the F1 score
-        (`f1_mean`, `f1_std`), the accuracy (`acc_mean`, `acc_std`) and the ROC
-        AUC (`auc_mean`, `auc_std`); the mean fitted threshold
-        (`threshold_mean`); and the run time in `seconds`.
+        `ensemble.summarize` of the run once all its folds are saved, else None.
     """
     start = time.perf_counter()
+    ds = drop_features(ds, config["drop"])
     n = len(ds.y_train)
-    folds = kfold_indices(n, config["k_folds"], config["seed"], config["subsample"])
-    scores = {"f1": [], "acc": [], "auc": [], "threshold": []}
-    for i, valid in enumerate(folds):
-        train = np.concatenate(folds[:i] + folds[i + 1 :])
-        pipeline = build_pipeline(config, ds.feature_names)
-        pipeline.fit(ds.x_train[train], ds.y_train[train])
-        y_valid = ds.y_train[valid]
-        score = pipeline.predict_score(ds.x_train[valid])
-        y_pred = (score >= pipeline.model.threshold_).astype(int)
-        scores["f1"].append(f1_score(y_valid, y_pred))
-        scores["acc"].append(accuracy(y_valid, y_pred))
-        scores["auc"].append(roc_auc(score, y_valid))
-        scores["threshold"].append(pipeline.model.threshold_)
+    splits = kfold_indices(n, config["k_folds"], config["seed"], config["subsample"])
+    for i in range(len(splits)) if folds is None else folds:
+        scores = run_fold(config, ds, splits, i)
         if verbose:
             seconds = time.perf_counter() - start
-            fold_f1 = scores["f1"][-1]
             print(
-                f"  fold {i + 1}/{len(folds)}: F1 {fold_f1:.4f} ({seconds:.0f} s)",
+                f"  fold {i + 1}/{len(splits)}: F1 {scores['f1']:.4f}, "
+                f"AUC {scores['auc']:.4f} ({seconds:.0f} s)",
                 flush=True,
             )
-    return {
-        "f1_mean": float(np.mean(scores["f1"])),
-        "f1_std": float(np.std(scores["f1"])),
-        "acc_mean": float(np.mean(scores["acc"])),
-        "acc_std": float(np.std(scores["acc"])),
-        "auc_mean": float(np.mean(scores["auc"])),
-        "auc_std": float(np.std(scores["auc"])),
-        "threshold_mean": float(np.mean(scores["threshold"])),
-        "seconds": time.perf_counter() - start,
+    try:
+        return ensemble.summarize(config["name"], config["seed"])
+    except FileNotFoundError:
+        return None
+
+
+def run_fold(
+    config: Config, ds: Dataset, splits: list[np.ndarray], i: int
+) -> dict[str, float]:
+    """Fit a preset on all folds but fold `i` and save the fold file.
+
+    The file (`ensemble.fold_path`) holds the validation rows, their labels and
+    scores, the scores of the test rows, the model's own threshold, the preset
+    and the run time. For models with `staged_scores` (GBDT), it also holds
+    the validation AUC, log-loss and best-threshold F1 after every block of
+    trees, which shows the best number of trees.
+
+    Returns:
+        The fold's F1 with the model's own threshold (`f1`) and its AUC (`auc`).
+    """
+    start = time.perf_counter()
+    valid = splits[i]
+    train = np.concatenate(splits[:i] + splits[i + 1 :])
+    pipeline = build_pipeline(config, ds.feature_names)
+    pipeline.fit(ds.x_train[train], ds.y_train[train])
+    x_valid, y_valid = ds.x_train[valid], ds.y_train[valid]
+    score = pipeline.predict_score(x_valid)
+    threshold = pipeline.model.threshold_
+    fields = {
+        "valid_idx": valid,
+        "valid_y": y_valid.astype(np.int8),
+        "valid_score": score,
+        "test_score": pipeline.predict_score(ds.x_test),
+        "threshold": threshold,
+        "config": json.dumps(config),
     }
+    if hasattr(pipeline.model, "staged_scores"):
+        stages = pipeline.model.staged_scores(pipeline.transform(x_valid))
+        fields |= _staged_metrics(stages, y_valid)
+    fields["seconds"] = time.perf_counter() - start
+    ensemble.save_fold(ensemble.fold_path(config["name"], config["seed"], i), fields)
+    return {
+        "f1": f1_score(y_valid, (score >= threshold).astype(int)),
+        "auc": roc_auc(score, y_valid),
+    }
+
+
+def _staged_metrics(
+    stages: list[tuple[int, np.ndarray]], y: np.ndarray
+) -> dict[str, np.ndarray]:
+    """Return the AUC, log-loss and best-threshold F1 of each stage's scores."""
+    metrics = {"stage_trees": [], "stage_auc": [], "stage_logloss": []}
+    metrics["stage_f1"] = []
+    for n_trees, score in stages:
+        metrics["stage_trees"].append(n_trees)
+        metrics["stage_auc"].append(roc_auc(score, y))
+        metrics["stage_logloss"].append(log_loss(score, y))
+        y_pred = (score >= best_threshold(score, y)).astype(int)
+        metrics["stage_f1"].append(f1_score(y, y_pred))
+    return {key: np.array(values) for key, values in metrics.items()}

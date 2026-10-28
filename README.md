@@ -174,6 +174,54 @@ uv run run.py                                    # rebuild the best submission (
 - Labels are {0, 1} in the code and {-1, 1} only in submission files.
 - `configs/best.toml` holds the preset of the best submission: do not edit it after submitting.
 
+## Part 3: GBDT, out-of-fold scores and blends
+
+**GBDT** (`p1/gbdt.py`, preset `configs/gbdt.toml`): gradient-boosted trees written with NumPy only. It takes the clean features as they are, without encoding:
+- `fit` bins every feature on the training rows: up to 63 quantile bins per numeric feature, one bin per categorical level with at least 30 rows plus one for the rarer levels, and always a bin 0 for the missing values.
+- Every tree is complete, of depth `depth`, and grown level by level from histograms of the gradient and hessian of the log-loss (`np.bincount`); each level counts only the smaller child of every node and gets its sibling by subtraction.
+- A numeric split cuts between two bins and sends the missing values to the side where they gain more. A categorical split sorts the levels by gradient over hessian and cuts that order, which finds the best grouping of the levels in two.
+- Leaf values and split gains are Newton steps with an L2 penalty `lambda_`; `min_child_hessian` bounds the leaf size. Each tree uses a random `row_fraction` of the rows and `feature_fraction` of the features, drawn from `seed`.
+- `init = "step2/logistic"` starts the boosting from the logit of that preset, fitted on the same rows, instead of from the base rate.
+
+**Out-of-fold (OOF) scores.** Every fold of `cv` writes `outputs/oof/<run>/seed<seed>_fold<k>.npz`: the fold model's scores on its validation rows and on the test set, and its own threshold. A GBDT fold also stores the validation AUC, log-loss and F1 after every 50 trees. The other commands work from these files only:
+
+```bash
+uv run p1 cv configs/gbdt.toml --fold 0          # one fold (one slurm task)
+uv run p1 cv configs/gbdt.toml --set seed=43     # another split of the rows into folds
+uv run p1 collect 'gbdt*' logistic               # summarize finished runs → table + outputs/cv_results.csv
+uv run p1 stages gbdt                            # GBDT validation metrics by number of trees
+uv run p1 compare gbdt logistic                  # paired difference over shared folds, corrected t-test
+uv run p1 blend logistic gbdt --name blend       # logit-average of runs; the weight is searched on OOF F1
+uv run p1 submit blend                           # → outputs/submissions/blend.csv
+```
+
+- **Nested F1** (the main score): for each fold, the threshold is the F1-optimal one on the OOF scores of the other folds, so it never sees the rows it is scored on. "own" uses each fold model's threshold on its training rows, and "pooled" the best threshold on all OOF rows (slightly optimistic).
+- **`compare`** pairs the per-fold nested F1 of two runs over every (seed, fold) both have, and applies the Nadeau–Bengio correction for overlapping training sets: t = mean(d) / sqrt((1/J + 1/(k−1)) var(d)).
+- **`blend`** averages the members' logits with weights that sum to 1, searched on a grid (step 0.05 for two members) for the best pooled OOF F1, and saves the blend as a run of its own, so `collect`, `compare`, `submit` and further blends work on it.
+- **`submit`** averages the logits of all fold models of a run (every fold and seed), and thresholds them at the best threshold of the pooled OOF scores. It prints the share of test rows predicted positive (it should match the OOF share) and checks that the test rows that answered `HAREHAB1` are predicted 1.
+- **`run.py`** rebuilds the final submission without fold files: it refits each member of `configs/best.toml` on all rows, averages their logits with the frozen weights and applies the frozen threshold.
+
+## Running on the cluster (SCITAS jed)
+
+The cross-validation folds run as slurm array tasks, one fold per task:
+
+```bash
+# once, on a fresh clone: uv, the environment, and the data (in a job: parsing needs about 6 GB)
+curl -LsSf https://astral.sh/uv/install.sh | env UV_NO_MODIFY_PATH=1 sh
+uv sync --frozen
+sbatch -p academic -q academic -A master -c 4 --mem=27G -t 00:30:00 \
+  --wrap "uv run python -c 'from p1.cleaning import build_clean_dataset; build_clean_dataset()'"
+
+# the 5 folds of a preset; @TASK@ becomes the array task id
+slurm/submit.sh -J gbdt --array=0-4 -c 1 --mem=6G -t 01:30:00 -- cv configs/gbdt.toml --fold @TASK@
+slurm/submit.sh -J lr --array=0-4 -c 4 --mem=27G -t 00:40:00 -- cv step2/logistic --fold @TASK@
+uv run p1 collect gbdt logistic                  # once the tasks are done
+```
+
+- `slurm/submit.sh` copies the code to `outputs/code/<time>/` and runs the job there, so editing the code does not change queued jobs. Logs go to `outputs/slurm/`.
+- `slurm/p1.sbatch` holds the account and partition flags (`academic`, account `master`). The partition allows 7,000 MB per CPU and has a default time limit of 5 minutes, so always pass `-t`.
+- A GBDT fold needs 1 CPU and 6 GB (`np.bincount` is single-threaded); a logistic-regression fold 4 CPUs (BLAS) and 27 GB.
+
 ## Checks
 
 ```bash

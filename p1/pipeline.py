@@ -3,8 +3,8 @@ from typing import Any, Self
 import numpy as np
 
 from p1 import cleaning
-from p1.config import Config
-from p1.models import MODELS, LinearModel
+from p1.config import Config, load_config
+from p1.models import MODELS, Model
 from p1.transforms import TRANSFORMS, Transform
 
 
@@ -13,13 +13,11 @@ class Pipeline:
 
     Args:
         transforms: Steps applied in order before the model.
-        model: Predictor trained on the transformed features.
+        model: Predictor trained on the transformed features (`models.MODELS`).
         seed: Seed for NumPy's global random generator, set at the start of `fit`.
     """
 
-    def __init__(
-        self, transforms: list[Transform], model: LinearModel, seed: int
-    ) -> None:
+    def __init__(self, transforms: list[Transform], model: Model, seed: int) -> None:
         self.transforms = transforms
         self.model = model
         self.seed = seed
@@ -44,13 +42,13 @@ class Pipeline:
 
     def predict_score(self, x: np.ndarray) -> np.ndarray:
         """Apply the fitted transforms and return the model's scores."""
-        return self.model.predict_score(self._transform(x))
+        return self.model.predict_score(self.transform(x))
 
     def predict(self, x: np.ndarray) -> np.ndarray:
         """Apply the fitted transforms and return labels in {0, 1}."""
-        return self.model.predict(self._transform(x))
+        return self.model.predict(self.transform(x))
 
-    def _transform(self, x: np.ndarray) -> np.ndarray:
+    def transform(self, x: np.ndarray) -> np.ndarray:
         """Apply the fitted transforms in order."""
         for step in self.transforms:
             x = step.transform(x)
@@ -63,7 +61,8 @@ def build_pipeline(config: Config, feature_names: list[str] | None = None) -> Pi
     A transform given as a string uses no options; a table gives its `name` and
     its options. A `columns` option, a column group or a list of feature names
     (see `column_indices`), is turned into column indices, so steps with one
-    must come before any step that moves columns, such as `onehot`.
+    must come before any step that moves columns, such as `onehot`. So must a
+    `categorical` model option (GBDT), which is resolved the same way.
 
     Args:
         config: Preset with `transforms`, `model` and `seed`.
@@ -92,6 +91,15 @@ def build_pipeline(config: Config, feature_names: list[str] | None = None) -> Pi
             moved_by = name
         steps.append(step)
     name, options = _name_and_options(config["model"], MODELS, "model")
+    if "categorical" in options:
+        if moved_by:
+            raise ValueError(
+                f"model option 'categorical' picks columns by name, "
+                f"so no transform may move them, as '{moved_by}' does"
+            )
+        options["categorical"] = column_indices(options["categorical"], feature_names)
+    if "init" in options:  # GBDT boosted from the scores of another preset
+        options["init"] = build_pipeline(load_config(options["init"]), feature_names)
     return Pipeline(steps, MODELS[name](**options), config["seed"])
 
 

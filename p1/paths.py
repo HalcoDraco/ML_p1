@@ -12,6 +12,7 @@ CLEANING_RULES = ROOT / "p1" / "cleaning.py"  # CLEAN_DATA is stale if this is n
 CONFIGS_DIR = ROOT / "configs"
 OUTPUTS_DIR = ROOT / "outputs"
 CV_RESULTS = OUTPUTS_DIR / "cv_results.csv"
+OOF_DIR = OUTPUTS_DIR / "oof"  # one folder of fold files per cross-validated run
 MODELS_DIR = OUTPUTS_DIR / "models"
 SUBMISSIONS_DIR = OUTPUTS_DIR / "submissions"
 FIGURES_DIR = ROOT / "report" / "figures"

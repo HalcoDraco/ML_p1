@@ -55,3 +55,9 @@ def best_threshold(score: np.ndarray, y: np.ndarray) -> float:
     # last row of a run of ties is a possible cut.
     last_of_tie = np.r_[sorted_score[1:] != sorted_score[:-1], True]
     return float(sorted_score[np.argmax(np.where(last_of_tie, f1, -1))])
+
+
+def log_loss(score: np.ndarray, y: np.ndarray) -> float:
+    """Return the mean log-loss of predicted probabilities `score` for labels `y`."""
+    p = np.clip(score, 1e-12, 1 - 1e-12)
+    return float(-np.mean(y * np.log(p) + (1 - y) * np.log(1 - p)))

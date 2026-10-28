@@ -90,10 +90,38 @@ def load_clean() -> Dataset:
     return _read_dataset(CLEAN_DATA)
 
 
+def drop_features(ds: Dataset, names: list[str]) -> Dataset:
+    """Return the dataset without the features `names`, for ablations.
+
+    Raises:
+        ValueError: If a name is not a feature of the dataset.
+    """
+    if not names:
+        return ds
+    unknown = sorted(set(names) - set(ds.feature_names))
+    if unknown:
+        raise ValueError(f"cannot drop unknown features: {', '.join(unknown)}")
+    keep = [j for j, name in enumerate(ds.feature_names) if name not in names]
+    return Dataset(
+        x_train=ds.x_train[:, keep],
+        y_train=ds.y_train,
+        x_test=ds.x_test[:, keep],
+        train_ids=ds.train_ids,
+        test_ids=ds.test_ids,
+        feature_names=[ds.feature_names[j] for j in keep],
+    )
+
+
 def save_dataset(ds: Dataset, path: Path) -> None:
-    """Save a dataset as an uncompressed `.npz` file, which loads in a second."""
+    """Save a dataset as an uncompressed `.npz` file, which loads in a second.
+
+    The file is written under a temporary name and then renamed, so jobs that
+    are reading the old file at the same time are not disturbed.
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
-    np.savez(path, **vars(ds))
+    tmp = path.with_suffix(".tmp.npz")
+    np.savez(tmp, **vars(ds))
+    tmp.replace(path)
 
 
 def _read_dataset(path: Path) -> Dataset:

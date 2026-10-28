@@ -13,6 +13,7 @@ DEFAULTS: Config = {
     "k_folds": 5,
     "subsample": 1.0,  # fraction of training rows used by `cv`
     "transforms": [],
+    "drop": [],  # features removed before the pipeline, for ablations
 }
 
 

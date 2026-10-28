@@ -4,6 +4,7 @@ from typing import Self
 import numpy as np
 
 import implementations
+from p1.gbdt import GradientBoostedTrees
 from p1.metrics import best_threshold
 
 
@@ -196,11 +197,15 @@ class RegLogisticRegression(LogisticRegression):
         )
 
 
-MODELS: dict[str, type[LinearModel]] = {
+# Every model has `fit`, `predict_score`, `predict` and a fitted `threshold_`.
+Model = LinearModel | GradientBoostedTrees
+
+MODELS: dict[str, type[Model]] = {
     "least_squares": LeastSquares,
     "ridge": RidgeRegression,
     "mse_gd": MeanSquaredErrorGD,
     "mse_sgd": MeanSquaredErrorSGD,
     "logistic": LogisticRegression,
     "reg_logistic": RegLogisticRegression,
+    "gbdt": GradientBoostedTrees,
 }
