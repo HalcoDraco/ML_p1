@@ -4,185 +4,233 @@
 \usepackage{microtype}
 \usepackage{graphicx}
 \usepackage{booktabs}
+\usepackage{float}
 \usepackage[hidelinks]{hyperref}
 \input{metadata}
-\hypersetup{pdftitle={Numerical Optimization and Nonlinear Models for Heart-Disease Classification},pdfauthor={\paperpdfauthors}}
-\graphicspath{{figures/}}
+\hypersetup{pdftitle={From Numerical Baselines to Gradient-Boosted Trees for Heart-Disease Classification},pdfauthor={\paperpdfauthors}}
 \hyphenation{op-ti-mi-za-tion reg-u-lar-i-za-tion ques-tion-naire}
 
 \begin{document}
-\title{Numerical Optimization and Nonlinear Models\\
+\title{From Numerical Baselines to Gradient-Boosted Trees\\
 for Heart-Disease Classification}
 \author{\paperauthors\\\paperaffiliation\\\papercontact}
 \maketitle
 
 \begin{abstract}
-We study how data representation, numerical optimization, and model capacity
-affect heart-disease classification in BRFSS survey responses. Under a
-NumPy-only modeling constraint, we implement six linear and logistic methods,
-investigate neural networks, and extend the comparison to gradient-boosted
-trees. Encoding categories and missingness yields a strong logistic baseline;
-greater neural capacity provides limited gains. Repeated cross-validation
-favors boosted trees, while engineered features produce the highest recorded
-F1 of 0.4474. We distinguish these local comparisons from the team's reported
-public competition F1 of 0.456.
+We classify self-reported heart disease in the 2015 BRFSS survey using
+six numerical methods and a NumPy gradient-boosted tree ensemble. The
+selected GBDT improves validation F1 from 0.4386 for logistic
+regression to 0.4462. On the test set, logistic regression scores
+0.449 F1 and GBDT scores 0.454.
 \end{abstract}
 
-\section{Problem and Data Representation}
-Our task is to classify self-reported coronary heart disease or myocardial
-infarction (\texttt{\_MICHD}) from the 2015 Behavioral Risk Factor Surveillance
-System (BRFSS)~\cite{cdc2015}. The course release contains 328,135 labeled
-respondents, 109,379 test respondents, and 321 predictors. Only 8.83\% of
-training labels are positive: predicting every respondent negative already
-gives 91.17\% accuracy, but zero positive-class F1. We therefore prioritize F1
-and use ROC AUC as a threshold-independent ranking measure.
+\section{Introduction}
 
-\paragraph{Preserving questionnaire semantics}
-Almost 45\% of entries are missing, often because a question is inapplicable
-or belongs to an optional module. Numeric codes are not necessarily
-quantities: \texttt{PHYSHLTH}=88 means zero days of poor physical health,
-whereas 77 and 99 mean unknown and refused. Codebook-based rules remove
-14 survey-design fields, two exact copies, and 14 mixed-unit fields with
-computed replacements. We convert units and fill implied numeric skips,
-leaving 56 numeric and 235 categorical predictors. Categorical unknown and
-refused answers retain their identities.
+Cardiovascular disease is a major public-health concern, and the 2015
+Behavioral Risk Factor Surveillance System (BRFSS) provides a large survey
+for studying associated health factors~\cite{cdc2015}. Its 321 predictors
+cover demographics, behaviors such as smoking and physical activity,
+reported conditions such as diabetes and hypertension, and healthcare use.
+The course release has 328,135 labeled respondents and 109,379 unlabeled
+test respondents, while the target variable \texttt{\_MICHD} indicates a self-reported history of coronary heart disease or heart attack.
 
-\paragraph{A representation suited to linear models}
-Numeric variables receive training-median imputation and missingness
-indicators. Categorical levels observed at least 30 times are one-hot encoded,
-with a separate missing category; rare or unseen levels map to all zeros.
-Standardization yields approximately 1,530 columns. All learned statistics
-are fitted within each training fold. Figure~\ref{fig:representation}
-illustrates the importance of encoding; it is an exploratory diagnostic,
-not the repeated-CV comparison below.
+This dataset mixes numeric quantities, categorical answer codes, and
+structured missingness. For example, \texttt{PHYSHLTH}=88 means zero days,
+while 77 and 99 mean an unknown or refused answer. Codebook-based rules drop
+14 survey-design variables, two duplicate variables, and 14 raw mixed-unit
+variables with computed replacements; they also convert units and fill
+numeric values implied by skipped questions. This leaves 56 numeric and 235
+categorical predictors. Unknown and refused categorical answers remain
+separate categories. Moreover, only 8.83\% of training labels are positive showing a clear data unbalance.
 
-\begin{figure}[t]
-  \centering
-  \includegraphics[width=\columnwidth]{representation.pdf}
-  \caption{Exploratory logistic-regression ablation on one 80/20 split.
-  F1 uses a validation-optimized threshold and is optimistic. Recoding also
-  removes survey-design fields and maps categorical unknowns to missing;
-  the final pipeline instead retains these categorical codes.}
-  \label{fig:representation}
-\end{figure}
+Linear models such as logistic regression are common baselines for tabular
+classification, while tree ensembles can capture nonlinear effects and
+interactions. Gradient-boosted decision trees (GBDT) are well suited to
+these survey data because they can split the cleaned variables directly
+and learn where to route missing answers
+~\cite{chen2016xgboost,ke2017lightgbm}. We then compare both approaches.
 
-\section{Numerical Methods and Model Capacity}\label{sec:methods}
-\paragraph{Objectives and optimization}
-For a design matrix $X$ including an intercept, labels $y\in\{0,1\}^N$,
-and scores $z=Xw$, we minimize
+\section{Methods}
+
+\subsection{Linear baselines.}
+We implement the six methods required by the project as linear
+baselines. Let $X$ include an intercept, let $y\in\{0,1\}^N$, and
+write $z=Xw$. The methods minimize either squared error or logistic
+loss:
 \begin{align}
-  L_{\mathrm{MSE}}(w)&=\frac{\lVert Xw-y\rVert_2^2}{2N},\\
-  L_{\mathrm{log}}(w)&=\frac{1}{N}\sum_{i=1}^{N}
-  \bigl[\log(1+e^{z_i})-y_i z_i\bigr].
+ L_{\mathrm{MSE}}(w)&=\frac{\lVert Xw-y\rVert_2^2}{2N},\\
+ L_{\mathrm{log}}(w)&=\frac1N\sum_{i=1}^{N}
+       \bigl[\log(1+e^{z_i})-y_i z_i\bigr].
 \end{align}
-Ridge and regularized logistic regression add $\lambda\lVert w\rVert_2^2$;
-gradient descent (GD) updates $w\leftarrow w-\gamma\nabla L(w)$.
-We compare MSE GD, single-sample stochastic GD (SGD), least squares, ridge,
-logistic GD, and regularized logistic GD, all implemented in NumPy.
 
-\paragraph{Conditioning and numerical stability}
-One-hot dependencies make $X^\top X$ singular; least squares uses a
-pseudoinverse and ridge solves $(X^\top X+2N\lambda I)w=X^\top y$.
-The measured $\lambda_{\max}(X^\top X/N)\simeq63.3$ gives MSE GD's
-stability condition $\gamma<2/63.3$. We use $\gamma=0.02$ for 100 steps,
-and $\gamma=0.1$ for 300 logistic steps. SGD takes $10^6$ single-sample
-updates at $\gamma=5\cdot10^{-6}$; rare standardized categories produce
-large row norms. Both regularized presets use $\lambda=10^{-3}$.
-Stable \texttt{logaddexp} evaluates logistic loss. MSE solvers share a
-hypothesis class; finite budgets affect their numerical solutions.
+For MSE, gradient descent (GD) uses the full gradient in
+$w\leftarrow w-\gamma\nabla L_{\mathrm{MSE}}(w)$, while stochastic GD
+(SGD) uses one sampled row per update. Least squares instead uses a
+pseudoinverse of $X^\top X$, which is singular for our one-hot design;
+ridge adds a regularizer $\lambda\lVert w\rVert_2^2$ and solves
+$(X^\top X+2N\lambda I)w=X^\top y$. The other two methods minimize logistic loss by GD, with or without
+the same $L_2$ penalty.
 
-\paragraph{Neural networks as a capacity test}
-Exploratory multilayer perceptrons (MLPs) use one hidden ReLU layer, Adam
-optimization~\cite{kingma2015adam}, and validation-based early stopping.
-Widths 64 and 256 achieve holdout F1 of 0.4341 and 0.4402; the latter uses
-dropout 0.3~\cite{srivastava2014dropout}. Reported overfitting after one to two
-epochs motivates regularization rather than unbounded expansion. A later MLP
-achieves repeated-CV F1 of 0.4399. These experiments test whether learned
-nonlinear interactions improve on a well-encoded additive classifier;
-the observed gains are limited.
+In the experiments, MSE GD uses 100 steps at $\gamma=0.02$ and SGD
+uses $10^6$ single-row steps at $\gamma=5\cdot10^{-6}$. Both logistic
+methods use 300 steps at $\gamma=0.1$; ridge and regularized logistic
+regression use $\lambda=10^{-3}$.
 
-\paragraph{A nonlinear extension with explicit interactions}
-Motivated by gradient boosting~\cite{chen2016xgboost,ke2017lightgbm}, we implement
-histogram trees in NumPy, with learned missing-value routing. A tuned ensemble
-uses depth 5, 550 trees, learning rate 0.05, 64 bins, leaf penalty 10,
-and row/feature fractions 0.7/0.3, averaging logits from model seeds 0--2.
-A later variant uses 2,000 trees at rate 0.02 and adds eight response-count
-features plus categorical target-rate encoding, smoothed with 50 pseudo-rows
-at the training prevalence. Target statistics are learned only on training
-folds. The five-member feature ensemble combines three seeds with two
-additional variants: feature fraction 0.2 and minimum child Hessian 1.
+\subsection{Gradient-Boosted Decision Trees (GBDT).}
+GBDT models log-odds as an additive sum of trees, starting from the
+training prevalence: $F_{t+1}(x)=F_t(x)+\eta f_t(x)$
+~\cite{friedman2001greedy}. Each tree is fitted to reduce logistic loss.
+Our NumPy code uses the loss gradients and Hessians to score candidate
+splits and leaf values~\cite{chen2016xgboost}. It bins each cleaned
+variable into at most 64 values, so split search uses compact
+histograms~\cite{ke2017lightgbm}. Missing answers get a separate bin,
+routed to whichever branch gives greater loss reduction. Depth-5
+trees can capture interactions between survey answers. We use 550
+trees, $\eta=0.05$, leaf $L_2$ penalty 10, minimum child Hessian 5,
+and row/feature fractions 0.7/0.3; logits from seeds 0--2 are averaged.
 
-\section{Evaluation and Results}
-\paragraph{Protocol and decision threshold}
-Table~\ref{tab:numerical} compares the six required methods on the same five
-shuffled folds (seed 42), with thresholds optimized on each model's training
-scores. The advanced comparison uses split seeds 42--44, five folds each;
-each scored fold takes its threshold from the other folds' out-of-fold
-predictions. Thresholds around 0.20--0.24 outperform the default 0.5 in this
-imbalanced task. Hyperparameters and blend weights are selected using these
-validation data, so this is not fully nested model-selection CV.
+\subsection{Data processing}\label{data_proc}
 
-\begin{table}[t]
-  \caption{Five-fold comparison of numerical methods. All rows except
-  ``Raw inputs'' share the encoded design. Spread is fold standard deviation,
-  not a confidence interval.}
-  \label{tab:numerical}
-  \centering
-  \small
-  \setlength{\tabcolsep}{5pt}
-  \input{generated/baseline_table}
+Each fold fits preprocessing on training rows and applies it to
+validation rows. Linear models fill
+missing numeric values with training medians, add missingness flags,
+one-hot encode categories seen at least 30 times, and standardize the
+resulting $\sim1{,}530$ columns. GBDT instead splits the 291 cleaned
+variables directly and learns how to route missing values.
+
+\subsection{Validation}
+Only 8.83\% of labels are positive, so predicting all negatives gives
+91.17\% accuracy but zero positive-class F1. We therefore report F1
+and threshold-independent ROC AUC. The numerical baselines use five
+shuffled folds (seed 42), with each decision threshold fitted on
+training scores. The GBDT comparison repeats five folds with split
+seeds 42--44; each scored fold uses a threshold chosen from the other
+folds' out-of-fold predictions. Test F1 comes from submitted predictions
+scored against hidden labels.
+
+\section{Results}
+\begin{table}[H]
+ \caption{Numerical baselines on five validation folds (seed 42).
+ F1 is mean $\pm$ fold SD; ROC AUC is the fold mean. Only the raw
+ least-squares baseline uses unencoded inputs.}
+ \label{tab:basic}
+ \centering
+ \small
+ \setlength{\tabcolsep}{5pt}
+ \input{generated/baseline_table}
 \end{table}
 
-\paragraph{Representation and loss matter before complexity}
-For least squares, encoding increases F1 from 0.4095 to 0.4301.
-Logistic GD reaches 0.4390 and improves on least squares on every fold;
-the tested L2 penalty adds no benefit. The exploratory encoding sequence
-in Fig.~\ref{fig:representation} supports preserving missingness and categories.
-However, once one-hot encoding is present, numeric cleaning alone changes
-paired five-fold F1 by only $-0.0003$; its semantic correctness should not be
-confused with a measurable incremental gain.
+\paragraph{Representation and linear baselines.}
+Encoding raises least-squares F1 from 0.4095 on raw inputs to 0.4301
+(Table~\ref{tab:basic}); logistic GD reaches 0.4390, the best linear
+result. The tested $L_2$ penalty changes logistic F1 by only $-0.0002$.
+GD, SGD, and direct least squares fit the same MSE model, so their
+differences partly reflect finite optimization budgets.
 
-\begin{figure}[t]
-  \centering
-  \includegraphics[width=\columnwidth]{model_families.pdf}
-  \caption{Recorded means over 15 validation folds, with thresholds selected
-  from other folds' OOF scores. Points are selected configurations; no error
-  bars are inferred from unavailable fold records. The later MLP is a
-  separate experiment from the exploratory networks in Section~\ref{sec:methods}.}
-  \label{fig:families}
+\begin{figure}[H]
+ \centering
+ \includegraphics[width=\columnwidth]{figures/representation.pdf}
+ \caption{Exploratory logistic-regression F1 on one 80/20 holdout.
+ The threshold was optimized on the holdout, making F1 optimistic.
+ Recoding also removes survey-design fields and changes categorical
+ unknown codes, unlike the final pipeline.}
+ \label{fig:representation}
 \end{figure}
 
-\paragraph{Nonlinearity helps; the final increments are uncertain}
-In the repeated comparison, logistic regression reaches 0.4386, the MLP
-0.4399, and the tuned tree ensemble 0.4462 (AUC 0.8703).
-The recorded Nadeau--Bengio corrected paired comparison~\cite{nadeau2003inference}
-estimates a tree--logistic F1 gain of 0.0077, with a 95\% interval
-$[0.0038,0.0115]$. Adding the MLP to the trees reaches 0.4469;
-engineered features and ensembling reach 0.4474
-(Fig.~\ref{fig:families}). The latter gain is only about 0.0011 over the
-tuned ensemble (corrected $t=1.51$). These selected-model comparisons
-support the larger tree gain more strongly than the final refinements;
-they do not account for the full model search. The team's best reported
-public AIcrowd F1 is 0.456, kept separate from the local CV results.
+Figure~\ref{fig:representation} shows an exploratory rise from 0.4172
+to 0.4400 F1 after recoding, missingness flags, and one-hot encoding.
+Because several changes were combined, it does not isolate their
+effects. A separate five-fold check found only $-0.0003$ F1 from
+numeric cleaning once one-hot encoding was present.
 
-\section{Discussion and Reproducibility}
-Our strongest finding is the progression from meaningful representation to
-a well-optimized logistic baseline, then to a nonlinear model with a
-larger measured gain. Extra neural capacity and ensemble diversity do not
-automatically improve generalization. Importantly, all 773 training
-respondents answering \texttt{HAREHAB1} are positive: this post-infarction
-rehabilitation question~\cite{cdc2015} leaks diagnosis information. Retaining
-it aids the benchmark but precludes interpreting the scores as prospective
-clinical prediction.
+\begin{table}[H]
+ \caption{Model comparison on 15 validation folds (five folds with
+ three split seeds) and on submitted test predictions. CV thresholds
+ come from other folds. Bold marks the final model; dashes mean no
+ reported score.}
+ \label{tab:advanced}
+ \centering
+ \footnotesize
+ \setlength{\tabcolsep}{2pt}
+ \begin{tabular}{@{}lccc@{}}
+ \toprule
+ Model & CV F1 & CV AUC & Test F1\\
+ \midrule
+ Logistic regression & 0.4386 & 0.8643 & 0.449\\
+ Single GBDT (9-run mean) & 0.4457 & 0.8698 & --\\
+ Three-seed GBDT & \textbf{0.4462} & \textbf{0.8703} & \textbf{0.454}\\
+ GBDT + logistic blend & 0.4463 & 0.8703 & --\\
+ Seven-config GBDT bag & 0.4469 & -- & --\\
+ GBDT + neural-net blend & 0.4469 & -- & --\\
+ Single GBDT + new features & 0.4466--0.4468 & -- & --\\
+ GBDT feature bag (3/5 seeds) & 0.4474 & -- & --\\
+ \bottomrule
+ \end{tabular}
+\end{table}
 
-Executable numerical methods, transforms, and GBDT recipes accompany this
-report. Results come from archived summaries; MLP source and fold artifacts
-are absent from this checkout. The current \texttt{run.py} refits the earlier
-three-member ensemble. Linking the 0.456 submission to its exact configuration
-and verifying identical predictions remain necessary for final reproducibility.
+\paragraph{Model choice and refinements.}
+The five-fold baseline table and the 15-fold model comparison use
+different threshold procedures, so their F1 values should be read
+within each table. On the 15 shared folds, the selected three-seed GBDT
+improves F1 over logistic regression by 0.0077 (corrected 95\% interval
+$[0.0038,0.0115]$)~\cite{nadeau2003inference}. The test submissions
+score 0.449 F1 for logistic regression and 0.454 for this GBDT.
+
+The nine single-GBDT runs span 0.4449--0.4469 F1; averaging seeds adds
+only 0.0001 over one selected seed. The feature bag uses answer counts
+and target-ordered codes and reaches 0.4474, but its paired gain is
+only 0.0011 (corrected $t=1.51$). Other bags and blends in
+Table~\ref{tab:advanced} show similarly small gains. A four-config
+bag gained 0.0020 in one five-fold comparison, with an interval that
+includes zero; using logistic predictions as a GBDT input gave
+0.4456--0.4460, and mixing feature and config bags gave 0.4467.
+We retain the three-seed model because no alternative shows a reliable
+CV gain and \texttt{run.py} reproduces its test submission. Model
+selection used these same folds, so CV may overestimate performance.
+
+\begin{figure}[H]
+ \centering
+ \includegraphics[width=\columnwidth]{figures/gbdt_tuning_draft.pdf}
+ \caption{One-factor GBDT tuning on five validation folds (seed 42).
+ Each point is mean log-loss at its best tree count. Changes are
+ evaluated separately, not cumulatively.}
+ \label{fig:tuning}
+\end{figure}
+
+Ordered-code splits lower best-stage validation log-loss from 0.21474
+to 0.21403 and raise F1 from 0.4456 to 0.4467
+(Fig.~\ref{fig:tuning}). A feature fraction of 0.3 reaches the same
+F1; stronger leaf regularization helps less.
 
 \clearpage
-\IEEEtriggeratref{4}
+\subsection{Further GBDT checks}
+Other depth, sampling, binning, and child-Hessian changes show no clear
+gain. Starting GBDT from logistic predictions performs worse
+(best-stage F1 0.4439).
+
+Reducing the learning rate to 0.02 with about 2,000 trees lowers
+validation log-loss from 0.21377 to 0.21349, but nested F1 stays near
+0.4456. We therefore use rate 0.05 and 550 trees, within a flat
+500--900-tree region; extending the default model to 2,000 trees
+overfits (nested F1 0.4323). Depth-one trees score 0.4417 nested F1
+versus 0.4457 for the selected depth-five single model, although other
+settings differ. In separate ablations, depth two reaches best-stage
+F1 0.4445, while removing \texttt{HAREHAB1} yields 0.4372. Best-stage F1 chooses its
+threshold on the evaluated fold and is optimistic relative to nested F1.
+
+\section{Conclusions}
+Fold-fitted encoding gives a useful linear baseline, but GBDT provides
+the main F1 gain. More complex ensembles and features show no reliable
+CV improvement. The final \texttt{run.py} refits three GBDTs on all
+labeled rows, averages their logits, and applies threshold 0.2166 to
+\texttt{x\_test.csv}; its reported test F1 is 0.454.
+
+This is a retrospective survey task. All 773 training respondents who
+answered \texttt{HAREHAB1}, a question about rehabilitation after a
+heart attack, are positive. That signal limits interpretation of the
+result as prospective clinical risk prediction.
+
+\clearpage
 \bibliographystyle{IEEEtran}
 \bibliography{references}
 \end{document}

@@ -55,6 +55,13 @@
       {"comparison": "GBDT plus logistic minus fc_bag", "diff": 0.0001, "t": 0.25, "low": -0.0008, "high": 0.0010}
     ]
   },
+  "public_submissions": {
+    "protocol": "Documented AIcrowd submissions scored against test labels; distinct from all local validation and CV scores.",
+    "rows": [
+      {"file": "logistic.csv", "f1": 0.449, "accuracy": 0.885, "source": "docs/part3_results.md"},
+      {"file": "best.csv", "f1": 0.454, "accuracy": 0.882, "source": "docs/round3_summary.md"}
+    ]
+  },
   "leaderboard": {
     "f1": 0.456,
     "source": "Team member confirmation in the accompanying conversation, 2026-10-29",
