@@ -64,7 +64,7 @@ def main():
     sns.despine(ax=ax, left=True)
     for suffix in ("pdf", "png"):
         fig.savefig(
-            ROOT / "figures" / f"gbdt_tuning_draft.{suffix}",
+            ROOT / "figures" / f"gbdt_tuning.{suffix}",
             dpi=300,
             facecolor="white",
             metadata={"Creator": "Matplotlib"} if suffix == "pdf" else None,

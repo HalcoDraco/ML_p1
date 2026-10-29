@@ -34,7 +34,7 @@ This direct command updates report/build/report.pdf, not report/report.pdf.
 - figures/representation.pdf: exploratory 80/20 representation study from
   docs/eda_findings.md. Its threshold was fitted on the plotted holdout,
   so its F1 values are optimistic and separate from the CV tables.
-- figures/gbdt_tuning_draft.pdf: one-factor, best-stage log-loss comparison
+- figures/gbdt_tuning.pdf: one-factor, best-stage log-loss comparison
   from docs/part3_results.md; scripts/plot_tuning.py regenerates it.
 - docs/part3_results.md and docs/round3_summary.md: the repeated five-fold
   comparison of logistic regression, GBDT, and later variants, plus the

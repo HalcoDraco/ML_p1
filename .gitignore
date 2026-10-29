@@ -14,4 +14,3 @@ report/*.out
 report/*.synctex.gz
 .DS_Store
 experiments/external_benchmarks/
-report_draft/build/
