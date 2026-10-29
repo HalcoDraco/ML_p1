@@ -1,19 +1,10 @@
-# Heart-disease prediction (EPFL ML Project 1)
+# Heart-disease prediction — EPFL CS-433 Project 1
 
-CS-433 Machine Learning, Project 1: predict whether a respondent of the BRFSS health survey has had coronary heart disease or a heart attack (`_MICHD`) from their answers. As the course requires, the code uses only NumPy, plus matplotlib for plots.
+This project predicts the BRFSS 2015 survey label `_MICHD` (self-reported coronary heart disease or heart attack). The six required methods are in `implementations.py`; the prediction pipeline uses NumPy without external ML libraries.
 
-## Setup
+## Setup and data
 
-Install [uv](https://docs.astral.sh/uv/), then run from the repository root:
-
-```bash
-uv sync
-```
-
-This creates `.venv/` with Python 3.14 and the exact package versions of `uv.lock`. Run everything with `uv run ...` (no activation needed), and add packages with `uv add <package>` (`uv add --dev <package>` for tools). For the notebooks in VS Code, select the `.venv` kernel.
-
-Download the course dataset from the Project 1 competition, then place these
-three files directly in `data/raw/` (create the directory if needed):
+Install [uv](https://docs.astral.sh/uv/) and run `uv sync --frozen` from the repository root. Download the course-provided dataset and place these three files, with their original names, directly in `data/raw/`:
 
 ```text
 data/raw/
@@ -22,237 +13,83 @@ data/raw/
 └── x_test.csv
 ```
 
-If the download is a ZIP containing a `dataset/` directory, extract the three
-CSV files from that directory into `data/raw/`. Keep their names unchanged.
-`sample_submission.csv` is not needed. The dataset is not included in this
-repository, and `data/raw/*.csv` is ignored by git. Run `uv run run.py` after
-placing the files; it builds the processed data and writes
-`outputs/submissions/best.csv`.
+Create `data/raw/` if it is missing. If the download is a ZIP with a `dataset/` directory, extract the three CSVs from that directory. The dataset is not in this repository; `data/raw/*.csv` is ignored by git. `sample_submission.csv` is not needed.
+
+Run the current prediction recipe with:
+
+```bash
+uv run python run.py --jobs 1
+```
+
+This rebuilds the processed data, trains on `x_train.csv` and `y_train.csv`, and writes `outputs/submissions/best.csv` for the rows and IDs in `x_test.csv`. A larger `--jobs` value fits members in parallel and uses more memory. The test labels are unavailable locally, so `run.py` does not print a test F1.
+
+## Data preparation
+
+`p1/cleaning.py` applies fixed BRFSS codebook rules to both train and test: it removes 30 survey, duplicate, or mixed-unit columns; converts numeric special codes and units; and fills numeric answers implied by survey skips. This leaves 291 predictors: 56 numeric and 235 categorical. Categorical unknown/refused codes remain distinct. The rules and exploratory checks are documented in `docs/eda_findings.md`.
+
+For linear models, `p1/transforms.py` imputes numeric medians, adds missingness indicators, one-hot encodes categorical levels seen at least 30 times, and standardizes the columns. Each fitted step uses only the training rows of its cross-validation fold.
+
+## Models
+
+We tested the six required methods in `implementations.py`: MSE gradient descent, MSE stochastic gradient descent (batch size 1), least squares, ridge, logistic gradient descent, and regularized logistic gradient descent. Their settings are in `configs/step2/`.
+
+We selected gradient-boosted decision trees (GBDT) because they improved validation F1 over these methods. GBDT builds trees sequentially, with each tree correcting errors left by the earlier ones. Our histogram-based implementation handles missing values and uses only NumPy and the Python standard library; it is in `p1/gbdt.py`. More information on the report.
+
+`run.py` reads `configs/best.toml`: three depth-5 GBDTs from `configs/gbdt_tuned.toml`, each with 550 trees, learning rate 0.05, and model seeds 0–2. It averages their logits with equal weights and classifies at the frozen threshold 0.2166.
 
 ## Layout
 
-```
-├── run.py               # reproduces the best submission
-├── implementations.py   # the six required step-2 functions
-├── helpers.py           # course-provided CSV helpers
-├── notebooks/           # part 1 (EDA), part 2 (cleaning), CV result plots
-├── configs/             # presets: one pipeline (transforms + model) per file
-│   └── step2/           # the six implementations.py methods, on the same encoding
-├── p1/                  # project code, importable from any folder
-│   ├── paths.py         # every file and folder path
-│   ├── data.py          # load raw and clean data, write submissions
-│   ├── eda.py           # part 1 helpers
-│   ├── cleaning.py      # part 2 rules
-│   ├── transforms.py    # part 3.1: fitted steps (impute, one-hot, standardize, ...)
-│   ├── models.py        # part 3.2: predictors (the six implementations.py methods)
-│   ├── pipeline.py      # transforms + model as one object
-│   ├── metrics.py       # F1, accuracy, ROC AUC, F1-optimal threshold
-│   ├── evaluation.py    # k-fold cross-validation
-│   ├── config.py        # presets, overrides, grids
-│   └── cli.py           # part 3 command line
-├── data/raw/            # place the three downloaded CSVs here (not tracked)
-├── data/processed/      # generated: raw.npz (parsing cache), clean.npz (part 2 output)
-├── outputs/             # generated by part 3: cv_results.csv, models/, submissions/
-├── report/              # original LaTeX template and EDA figures
-├── report_draft/        # current report PDF, LaTeX source, figures and results
-├── docs/                # project description, EDA findings and experiment results
-└── grading_tests/       # course tests
+```text
+ML_p1/
+├── run.py                # trains the selected model and writes best.csv
+├── implementations.py    # six required ML methods
+├── helpers.py            # course-provided CSV helpers
+├── p1/                   # cleaning, transforms, models, CV and ensembles
+├── configs/              # model presets; step2/ has the six methods
+├── data/raw/             # locally downloaded CSVs
+├── docs/                 # project description, EDA and experiment records
+├── notebooks/            # exploratory analysis and cleaning
+├── grading_tests/        # course public tests
+├── slurm/                # cluster job scripts
+├── outputs/              # generated CV results and submission CSVs
+├── pyproject.toml        # Python dependencies
+└── uv.lock               # locked dependency versions
 ```
 
-The downloaded CSVs and generated files in `data/processed/` and `outputs/`
-are not tracked by git.
+## Evaluation and results
 
-## Workflow
+All results below come from local validation on the labeled training set. The labels for `x_test.csv` are hidden locally; AIcrowd computes its score after `best.csv` is submitted.
 
-```
-raw CSVs ─(part 2, once)─► clean.npz ─(part 3: transforms → model)─► CV scores, submissions
-```
+The six required methods and raw baseline were compared on the same five shuffled folds (seed 42; all 328,135 training rows). Preprocessing is refitted within each training fold. Each model chooses its F1 threshold on its training scores, then predicts the held-out fold. The table reports positive-class F1 as mean ± fold standard deviation and mean ROC AUC. Run `uv run p1 cv configs/step2/*.toml baseline` to repeat this comparison; results and fold scores are written under `outputs/`.
 
-| Part | Entrypoint | Code |
-|---|---|---|
-| 1. EDA | `notebooks/01_eda.ipynb` | `p1/eda.py` |
-| 2. Cleaning | `notebooks/02_cleaning.ipynb` (its last cell writes `clean.npz`) | `p1/cleaning.py` |
-| 3. Transforms + models | `uv run p1 ...` with a preset from `configs/` | `p1/transforms.py`, `p1/models.py` |
-| Final submission | `uv run run.py` | all of the above |
+| Method | Validation F1 | Validation AUC |
+|---|---:|---:|
+| Raw least squares baseline | 0.4095 ± 0.0019 | 0.845 |
+| MSE / GD | 0.4289 ± 0.0022 | 0.858 |
+| MSE / SGD | 0.4255 ± 0.0033 | 0.855 |
+| Least squares | 0.4301 ± 0.0018 | 0.857 |
+| Ridge | 0.4297 ± 0.0031 | 0.858 |
+| Logistic / GD | 0.4390 ± 0.0027 | 0.864 |
+| Regularized logistic / GD | 0.4388 ± 0.0022 | 0.864 |
 
-Notebooks are for exploring. Code the final pipeline needs lives in `p1/`, so `run.py` rebuilds everything from the raw data without them.
+The later model comparison used three split seeds (42–44), five folds per seed, and a threshold chosen from the other folds' out-of-fold predictions. These results use a different protocol from the table above:
 
-**Part 2 or part 3.1?** A step that learns something from the data (a median, a mean, a covariance) is a transform in `p1/transforms.py`: it is refitted on each training split, so validation data never leaks into it. Fixed rules, such as turning the codebook's "don't know / refused" codes into NaN, are part 2. Steps you want to switch on and off in experiments are also transforms.
+| Model | Validation F1 | Validation AUC |
+|---|---:|---:|
+| Logistic regression (reference) | 0.4386 | 0.8643 |
+| **Three-seed GBDT (current `run.py` configuration)** | **0.4462** | **0.8703** |
 
-## Part 2: cleaning
+The GBDT improves on logistic regression by 0.0077 F1 in the paired comparison (corrected 95% interval [0.0038, 0.0115]).
 
-`p1/cleaning.py` turns the raw answers into `data/processed/clean.npz` with fixed rules from the [BRFSS 2015 codebook](https://www.cdc.gov/brfss/annual_data/2015/pdf/codebook15_llcp.pdf). They learn nothing from the data, so train and test are cleaned alike:
+The GBDT validation score comes from averaging fold models (`fc_bag`); `run.py` refits the same three model seeds on all training rows. Model selection also used the CV data, so the table is not fully nested model-selection CV. See `docs/part3_results.md` and `report/report.pdf` for the comparisons and their limitations.
 
-1. Drop 30 of the 321 features: 14 about the survey rather than the respondent (record ids, interview dates, sampling weights), 2 exact copies, and 14 raw answers that pack a unit into the number (`ALCDAY5` is 1xx days per week or 2xx days per month), whose versions computed by the CDC (`DROCDY3_`, `WTKG3`, ...) are kept.
-2. Turn the 56 numeric answers into quantities: "none" codes (88, 888) become 0, "don't know" and "refused" codes become NaN, answers with mixed units become times per year or years, and dates (MMYYYY) become months before the interview.
-3. Fill the numeric questions that the survey skips because their answer is implied: 0 days of poor health, 0 drinks, 0 minutes of exercise.
-4. Keep the codes of the 235 categorical answers ("don't know" carries signal) for one-hot encoding in part 3.
-
-`cleaning.NUMERIC` lists the numeric features and `cleaning.HEAVY_TAILED` those worth a log transform. `notebooks/02_cleaning.ipynb` checks the rules on the data and writes `clean.npz`, and `run.py` rebuilds it with `build_clean_dataset()`. The reason for each rule is in `docs/eda_findings.md`.
-
-## Step 2: the six methods of `implementations.py`
-
-`implementations.py` holds the six functions of the assignment with their exact signatures. It only needs NumPy and runs on Python 3.9 with NumPy 1.23, the grader's environment.
-
-| Function | Method |
-|---|---|
-| `mean_squared_error_gd(y, tx, initial_w, max_iters, gamma)` | linear regression by gradient descent |
-| `mean_squared_error_sgd(y, tx, initial_w, max_iters, gamma)` | linear regression by SGD, one random sample per step |
-| `least_squares(y, tx)` | normal equations (pseudo-inverse, so singular designs work) |
-| `ridge_regression(y, tx, lambda_)` | normal equations of MSE + λ‖w‖² |
-| `logistic_regression(y, tx, initial_w, max_iters, gamma)` | gradient descent on the logistic loss, y ∈ {0, 1} |
-| `reg_logistic_regression(y, tx, lambda_, initial_w, max_iters, gamma)` | the same, plus λ‖w‖² |
-
-Each returns `(w, loss)`: the last weights and the loss at those weights (MSE with the factor 1/2, or logistic loss). For the regularized methods the loss excludes the penalty term. `tx` must already contain the bias column. The functions can be called on any NaN-free matrix:
-
-```python
-import numpy as np
-from implementations import ridge_regression
-
-tx = np.c_[np.ones(len(x)), x]  # x: features without NaNs, shape (N, D)
-w, loss = ridge_regression(y, tx, 1e-3)
-```
-
-### Running them on the data
-
-The clean features contain NaNs and categorical codes, so they need an encoding first. Each method has a preset in `configs/step2/` that runs it after the same encoding of `clean.npz`. Every step of the encoding is learned on the training rows only:
-
-1. The 56 numeric features (`cleaning.NUMERIC`): NaN → median, plus a 0/1 column marking where the value was missing.
-2. The 235 categorical features: one 0/1 column per answer given by at least 30 training rows, plus one for NaN. Codes such as "don't know" keep their own column.
-3. Standardization of every column. The model then adds the bias column.
-
-This gives about 1,530 columns. Commands, from the repository root:
+To repeat the three-seed GBDT comparison, run five-fold CV for each model seed and split seed, then average the out-of-fold logits:
 
 ```bash
-uv run p1 cv configs/step2/*.toml                    # the six methods, 5-fold CV on the same folds
-uv run p1 cv step2/logistic                          # one method
-uv run p1 cv step2/logistic --set subsample=0.2      # a quick run on 20% of the rows
-uv run p1 cv step2/ridge --set model.lambda_=1e-2    # change a hyper-parameter
-uv run p1 train step2/logistic                       # fit on all rows → outputs/models/logistic.pkl
-uv run p1 predict logistic                           # → outputs/submissions/logistic.csv
-```
-
-**Evaluation.** `cv` shuffles the training rows with the preset's `seed` (42) and splits them into `k_folds` (5) folds, the same for every preset. For each fold, it fits the whole pipeline (encoding, model and threshold) on the other four folds and scores the held-out one. It reports the mean ± standard deviation over the folds of:
-- F1, the competition metric;
-- accuracy;
-- ROC AUC, the probability that a random positive gets a higher score than a random negative (it does not depend on the threshold).
-
-It prints a table ranked by F1 and appends a row per preset to `outputs/cv_results.csv`.
-
-**Results** of `uv run p1 cv configs/step2/*.toml baseline` (5-fold CV on all 328,135 training rows, about 15 minutes on 16 cores):
-
-| Preset | F1 | Accuracy | ROC AUC | Threshold | Time (5 folds) |
-|---|---|---|---|---|---|
-| `logistic` | 0.4390 ± 0.0027 | 0.880 | 0.864 | 0.23 | 5.0 min |
-| `reg_logistic` | 0.4388 ± 0.0022 | 0.878 | 0.864 | 0.23 | 4.7 min |
-| `least_squares` | 0.4301 ± 0.0018 | 0.875 | 0.857 | 0.22 | 38 s |
-| `ridge` | 0.4297 ± 0.0031 | 0.879 | 0.858 | 0.23 | 36 s |
-| `mse_gd` | 0.4289 ± 0.0022 | 0.876 | 0.858 | 0.21 | 1.8 min |
-| `mse_sgd` | 0.4255 ± 0.0033 | 0.875 | 0.855 | 0.22 | 57 s |
-| `baseline`: least squares on the raw values (NaN → median) | 0.4095 ± 0.0019 | 0.867 | 0.845 | 0.22 | 10 s |
-
-Logistic regression beats least squares on every fold (+0.009 F1), but the encoding matters more: with least squares, going from the raw values to the encoding above gains 0.021. Training on all rows (`train`) needs about 13 GB of RAM.
-
-**Threshold.** Only 8.8% of the labels are positive, so predicting 1 from a score of 0.5 misses most positives: F1 is then 0.26 for logistic regression and 0.16 for least squares, instead of 0.44 and 0.43. With `threshold = "auto"`, the default, each model picks after training the threshold that maximizes F1 on its own training rows. The held-out fold is never used for it, and the result is within 0.002 F1 of the best threshold for the held-out fold. A fixed value can be set instead, for example `--set model.threshold=0.5`.
-
-**Step sizes.** On this encoding, gradient descent on the MSE is stable for γ < 2/λ_max(XᵀX/N) = 2/63 ≈ 0.032, and on the logistic loss for γ < 8/63 ≈ 0.13 (the presets use 0.02 and 0.1). SGD diverges from γ = 1e-4: a few rows with rare answers have very large norms after standardization, so the preset uses γ = 5e-6. A step size that is too large gives a poor F1, or, once the weights overflow to inf or NaN, the warning "the weights diverged".
-
-## Part 3: presets
-
-A preset in `configs/` describes one pipeline: transforms applied in order, then a model.
-
-```toml
-# configs/ridge_poly.toml
-transforms = ["impute_median", { name = "poly", degree = 2 }, "standardize"]
-
-[model]
-name = "ridge"
-lambda_ = 1e-3
-
-[grid]  # used by `cv` only: every combination is evaluated (3 × 2 here)
-"model.lambda_" = [1e-4, 1e-3, 1e-2]
-"transforms.poly.degree" = [1, 2]
-```
-
-```bash
-uv run p1 cv ridge_poly                          # cross-validate a preset and its grid
-uv run p1 cv baseline ridge_poly                 # compare presets on the same folds
-uv run p1 cv ridge_poly --set model.lambda_=0.1  # override a value without editing the file
-uv run p1 train ridge_poly                       # fit on all training data → outputs/models/
-uv run p1 predict ridge_poly                     # → outputs/submissions/ridge_poly.csv
-uv run run.py                                    # rebuild the best submission (configs/best.toml)
-```
-
-- `cv` prints a ranked table and appends every result to `outputs/cv_results.csv`. Presets can also be paths, e.g. `uv run p1 cv configs/ablation/*.toml`.
-- `train` ignores `[grid]`: write the winning values into the preset.
-- Transforms, each fitted on the training rows only: `impute_median` (option `indicators`), `onehot` (`min_count`, `max_levels`), `log1p`, `standardize`, `poly` (`degree`), `whiten`. A `columns` option limits a step to some features: a list of names, or the group `numeric`, `categorical` or `heavy_tailed`. Steps with `columns` must come before `onehot` and `whiten`, which move columns.
-- Models: `least_squares`, `ridge` (`lambda_`), `mse_gd`, `mse_sgd`, `logistic` (`max_iters`, `gamma`), `reg_logistic` (`lambda_`, `max_iters`, `gamma`). They all accept `threshold` (default `"auto"`, see step 2).
-- To add a transform or a model, write its class in `p1/transforms.py` or `p1/models.py` and register it in `TRANSFORMS` or `MODELS`.
-- Labels are {0, 1} in the code and {-1, 1} only in submission files.
-- `configs/best.toml` holds the preset of the best submission: do not edit it after submitting.
-
-## Part 3: GBDT, out-of-fold scores and blends
-
-**GBDT** (`p1/gbdt.py`, preset `configs/gbdt.toml`): gradient-boosted trees written with NumPy only. It takes the clean features as they are, without encoding:
-- `fit` bins every feature on the training rows: up to 63 quantile bins per numeric feature, one bin per categorical level with at least 30 rows plus one for the rarer levels, and always a bin 0 for the missing values.
-- Every tree is complete, of depth `depth`, and grown level by level from histograms of the gradient and hessian of the log-loss (`np.bincount`); each level counts only the smaller child of every node and gets its sibling by subtraction.
-- A numeric split cuts between two bins and sends the missing values to the side where they gain more. A categorical split sorts the levels by gradient over hessian and cuts that order, which finds the best grouping of the levels in two.
-- Leaf values and split gains are Newton steps with an L2 penalty `lambda_`; `min_child_hessian` bounds the leaf size. Each tree uses a random `row_fraction` of the rows and `feature_fraction` of the features, drawn from `seed`.
-- `init = "step2/logistic"` starts the boosting from the logit of that preset, fitted on the same rows, instead of from the base rate.
-
-**Out-of-fold (OOF) scores.** Every fold of `cv` writes `outputs/oof/<run>/seed<seed>_fold<k>.npz`: the fold model's scores on its validation rows and on the test set, and its own threshold. A GBDT fold also stores the validation AUC, log-loss and F1 after every 50 trees. The other commands work from these files only:
-
-```bash
-uv run p1 cv configs/gbdt.toml --fold 0          # one fold (one slurm task)
-uv run p1 cv configs/gbdt.toml --set seed=43     # another split of the rows into folds
-uv run p1 collect 'gbdt*' logistic               # summarize finished runs → table + outputs/cv_results.csv
-uv run p1 stages gbdt                            # GBDT validation metrics by number of trees
-uv run p1 compare gbdt logistic                  # paired difference over shared folds, corrected t-test
-uv run p1 blend logistic gbdt --name blend       # logit-average of runs; the weight is searched on OOF F1
-uv run p1 submit blend                           # → outputs/submissions/blend.csv
-```
-
-- **Nested F1** (the main score): for each fold, the threshold is the F1-optimal one on the OOF scores of the other folds, so it never sees the rows it is scored on. "own" uses each fold model's threshold on its training rows, and "pooled" the best threshold on all OOF rows (slightly optimistic).
-- **`compare`** pairs the per-fold nested F1 of two runs over every (seed, fold) both have, and applies the Nadeau–Bengio correction for overlapping training sets: t = mean(d) / sqrt((1/J + 1/(k−1)) var(d)).
-- **`blend`** averages the members' logits with weights that sum to 1, searched on a grid (step 0.05 for two members) for the best pooled OOF F1, and saves the blend as a run of its own, so `collect`, `compare`, `submit` and further blends work on it.
-- **`submit`** averages the logits of all fold models of a run (every fold and seed), and thresholds them at the best threshold of the pooled OOF scores. It prints the share of test rows predicted positive (it should match the OOF share) and checks that the test rows that answered `HAREHAB1` are predicted 1.
-- **`run.py`** rebuilds the final submission without fold files: it refits each member of `configs/best.toml` on all rows, averages their logits with the frozen weights and applies the frozen threshold.
-
-## Running on the cluster (SCITAS jed)
-
-The cross-validation folds run as slurm array tasks, one fold per task:
-
-```bash
-# once, on a fresh clone: uv, the environment, and the data (in a job: parsing needs about 6 GB)
-curl -LsSf https://astral.sh/uv/install.sh | env UV_NO_MODIFY_PATH=1 sh
-uv sync --frozen
-sbatch -p academic -q academic -A master -c 4 --mem=27G -t 00:30:00 \
-  --wrap "uv run python -c 'from p1.cleaning import build_clean_dataset; build_clean_dataset()'"
-
-# the 5 folds of a preset; @TASK@ becomes the array task id
-slurm/submit.sh -J gbdt --array=0-4 -c 1 --mem=6G -t 01:30:00 -- cv configs/gbdt.toml --fold @TASK@
-slurm/submit.sh -J lr --array=0-4 -c 4 --mem=27G -t 00:40:00 -- cv step2/logistic --fold @TASK@
-uv run p1 collect gbdt logistic                  # once the tasks are done
-```
-
-- `slurm/submit.sh` copies the code to `outputs/code/<time>/` and runs the job there, so editing the code does not change queued jobs. Logs go to `outputs/slurm/`.
-- `slurm/p1.sbatch` holds the account and partition flags (`academic`, account `master`). The partition allows 7,000 MB per CPU and has a default time limit of 5 minutes, so always pass `-t`.
-- A GBDT fold needs 1 CPU and 6 GB (`np.bincount` is single-threaded); a logistic-regression fold 4 CPUs (BLAS) and 27 GB.
-
-## Checks
-
-```bash
-uv run black .   # the grader checks that every .py file is black-formatted
-uv run pytest grading_tests --github_link . -k "not black and not todo and not github_link"
-# the same tests of implementations.py with the grader's Python 3.9 and NumPy 1.23.1:
-uv run --isolated --no-project --python 3.9 --with numpy==1.23.1 --with pytest --with gitpython \
-  pytest grading_tests --github_link . -k "not black and not todo and not github_link"
-```
-
-All course tests, in the grader's environment (Python 3.9, NumPy 1.23.1, black 22.6), on a pushed commit:
-
-```bash
-uv run --isolated --no-project --python 3.9 \
-  --with numpy==1.23.1 --with black==22.6.0 --with pytest==7.1.2 --with gitpython==3.1.18 \
-  pytest grading_tests --github_link https://github.com/HalcoDraco/ML_p1/tree/<commit>
+for m in 0 1 2; do
+  for s in 42 43 44; do
+    uv run p1 cv gbdt_tuned --set name=fc_m$m --set seed=$s --set model.seed=$m
+  done
+done
+uv run p1 blend fc_m0 fc_m1 fc_m2 --name fc_bag --weights 1 1 1
 ```
