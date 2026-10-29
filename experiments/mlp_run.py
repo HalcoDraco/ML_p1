@@ -7,14 +7,14 @@ The slurm array task id t runs fold seed 42 + t // 5, fold t % 5 (or --seed/--fo
 import argparse
 import json
 import os
+from pathlib import Path
 import sys
 import time
 
 import numpy as np
 
-sys.path.insert(0, "/home/pgonzale/ML_p1")
-sys.path.insert(0, "/scratch/pgonzale/p1x")
-import mlp  # noqa: E402
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from experiments import mlp  # noqa: E402
 from p1 import cleaning  # noqa: E402
 from p1 import models as M  # noqa: E402
 from p1 import transforms as T  # noqa: E402

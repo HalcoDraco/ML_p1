@@ -11,6 +11,7 @@ import matplotlib
 matplotlib.use("Agg")
 
 import matplotlib.pyplot as plt
+import seaborn as sns
 
 ROOT = Path(__file__).resolve().parents[1]
 
@@ -25,9 +26,11 @@ RESULTS = [
 
 
 def main():
+    sns.set_theme(style="whitegrid", context="paper", font="STIXGeneral")
     plt.rcParams.update(
         {
             "font.family": "serif",
+            "font.serif": ["STIXGeneral", "DejaVu Serif"],
             "font.size": 8,
             "pdf.fonttype": 42,
             "axes.spines.top": False,
@@ -52,10 +55,13 @@ def main():
     ax.axvline(RESULTS[0][1], color="#BDC8D3", linewidth=0.8, zorder=1)
     ax.set_yticks(range(len(RESULTS)), [row[0] for row in reversed(RESULTS)])
     ax.set_xlim(0.21388, 0.21498)
+    ax.set_ylim(-0.35, len(RESULTS) - 0.65)
     ax.set_xticks([0.2140, 0.2144, 0.2148])
     ax.set_xlabel("Validation log-loss (lower is better)", labelpad=3)
     ax.tick_params(axis="y", length=0, pad=5)
     ax.grid(axis="x", color="#E4E9EF", linewidth=0.5)
+    ax.grid(axis="y", visible=False)
+    sns.despine(ax=ax, left=True)
     for suffix in ("pdf", "png"):
         fig.savefig(
             ROOT / "figures" / f"gbdt_tuning_draft.{suffix}",

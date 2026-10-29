@@ -49,6 +49,9 @@ ML_p1/
 ├── data/raw/             # locally downloaded CSVs
 ├── docs/                 # project description, EDA and experiment records
 ├── notebooks/            # exploratory analysis and cleaning
+├── experiments/          # portable NumPy MLP and feature-engineering experiments
+├── report/               # final LaTeX manuscript, figures and report.pdf
+├── SUBMISSION.md         # submission steps and final verification record
 ├── grading_tests/        # course public tests
 ├── slurm/                # cluster job scripts
 ├── outputs/              # generated CV results and submission CSVs
@@ -81,6 +84,13 @@ The later model comparison used three split seeds (42–44), five folds per seed
 
 The GBDT improves on logistic regression by 0.0077 F1 in the paired comparison (corrected 95% interval [0.0038, 0.0115]).
 
+The recovered `outputs/cv_results.csv` contains the per-split summaries and
+configuration JSON for the later experiments. The five-network MLP uses hidden
+widths 512/256, dropout 0.3, AdamW, batch size 512, and at most two epochs;
+its repeated-CV F1 is 0.4399 (AUC 0.8655). Its source and portable launcher are
+in `experiments/mlp.py` and `experiments/mlp_run.py`. See `experiments/README.md`
+for commands and the limits of the archived artifacts.
+
 The GBDT validation score comes from averaging fold models (`fc_bag`); `run.py` refits the same three model seeds on all training rows. Model selection also used the CV data, so the table is not fully nested model-selection CV. See `docs/part3_results.md` and `report/report.pdf` for the comparisons and their limitations.
 
 To repeat the three-seed GBDT comparison, run five-fold CV for each model seed and split seed, then average the out-of-fold logits:
@@ -93,3 +103,27 @@ for m in 0 1 2; do
 done
 uv run p1 blend fc_m0 fc_m1 fc_m2 --name fc_bag --weights 1 1 1
 ```
+
+## Report and submission
+
+Upload **`report/report.pdf`**. It has two content pages and a separate
+reference page. `report/README.md` describes its build and checks;
+`SUBMISSION.md` contains the course submission checklist and the final audit.
+The documented public AIcrowd scores are 0.449 for `logistic.csv` and 0.454
+for `best.csv`. A team-reported 0.456 must be linked to its exact uploaded CSV
+before selecting it as the final reproducible submission.
+
+The final review re-executed `run.py` from the original course CSVs and
+obtained a byte-identical `best.csv` with zero prediction differences.
+`outputs/reproduction_check.json` records its SHA-256 and configuration.
+
+Run the public tests against a clean clone or tracked-file export, rather
+than the working directory containing `.venv/`: the course's recursive file
+checks otherwise inspect installed dependencies as well as project code.
+
+```bash
+uv run pytest grading_tests --github_link https://github.com/HalcoDraco/ML_p1/tree/COMMIT_HASH
+```
+
+Replace `COMMIT_HASH` with the full final commit hash. The submission URL must
+refer to that exact public commit.

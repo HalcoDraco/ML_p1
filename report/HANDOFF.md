@@ -1,10 +1,16 @@
 # Report handoff
 
-The current draft has three content pages and a fourth reference page. It
+The report has two content pages and a third reference page. It
 contains two result tables and two exploratory figures. It covers the six
 required implementations, the BRFSS preprocessing, the selected NumPy GBDT,
 two distinct validation protocols, and the limits of interpreting the target.
 Build it with the command in report/README.md.
+
+The final review recovered and checked the NumPy MLP implementation and its
+configuration in `outputs/cv_results.csv`: five 512/256 networks, dropout 0.3,
+AdamW at initial rate 0.001, batch size 512, and two epochs, with inner
+checkpoint selection. This model is now described explicitly and appears
+in Table II (CV F1 0.4399, AUC 0.8655).
 
 ## Sources of the numbers
 
@@ -34,3 +40,10 @@ submission ID or CSV tying that score to a specific recipe. The report includes
 the documented 0.449 and 0.454 submissions and leaves 0.456 out. Before the
 final AIcrowd selection, verify that the chosen submission was produced by the
 exact current run.py output.
+
+The final review has now verified that correspondence for the recovered
+`best.csv`: a complete retraining with the locked environment produces a
+byte-identical CSV (zero differing predictions; SHA-256
+`41b4219359b13278fd43fc28ef90aae5be2d48b59157db0d3916dde8d124ce80`).
+This establishes reproduction of the documented 0.454 CSV, not a mapping
+to the unidentified 0.456 upload. See `SUBMISSION.md` for exact upload steps.

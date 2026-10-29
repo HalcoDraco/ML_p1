@@ -1,0 +1,18 @@
+{
+  "date": "2026-10-29",
+  "command": "uv run --no-sync python run.py --jobs 1",
+  "python": "3.14.3",
+  "numpy": "2.5.4",
+  "reference_commit": "088a838",
+  "reference_csv": "outputs/submissions/best.csv",
+  "reference_sha256": "41b4219359b13278fd43fc28ef90aae5be2d48b59157db0d3916dde8d124ce80",
+  "reproduced_sha256": "41b4219359b13278fd43fc28ef90aae5be2d48b59157db0d3916dde8d124ce80",
+  "byte_identical": true,
+  "prediction_differences": 0,
+  "rows": 109379,
+  "positive_predictions": 14158,
+  "model": "Three gbdt_tuned members, seeds 0/1/2, equal logit weights, threshold 0.2166",
+  "documented_aicrowd_f1": 0.454,
+  "aicrowd_submission_id": null,
+  "note": "This verifies the archived best.csv. It does not identify the separately team-reported 0.456 upload."
+}

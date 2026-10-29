@@ -1,9 +1,10 @@
 """Scratch: paired per-fold staged log-loss / AUC differences of runs vs a reference run, at given tree counts."""
 
+from pathlib import Path
 import sys
 import numpy as np
 
-sys.path.insert(0, "/home/pgonzale/ML_p1")
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from p1 import ensemble
 
 ref = sys.argv[1]

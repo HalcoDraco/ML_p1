@@ -4,11 +4,12 @@ Usage: python report.py PATTERN [PATTERN ...] [--seed 42]
 """
 
 import argparse
+from pathlib import Path
 import sys
 
 import numpy as np
 
-sys.path.insert(0, "/home/pgonzale/ML_p1")
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from p1 import ensemble  # noqa: E402
 from p1.paths import OOF_DIR  # noqa: E402
 

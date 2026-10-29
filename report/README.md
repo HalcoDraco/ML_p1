@@ -1,7 +1,7 @@
 # Project 1 report
 
 The manuscript is in report.tex; the compiled copy is report.pdf. The current
-draft has three content pages and a fourth page of references. Results use two tables
+report has two content pages and a third page of references. Results use two tables
 and two figures about data representation and GBDT tuning.
 The paper separates local validation results from two documented AIcrowd
 test-submission scores: F1 0.449 for logistic.csv and F1 0.454 for best.csv.
@@ -17,7 +17,7 @@ From the repository root, with uv, latexmk, pdflatex, and bibtex installed:
 Add --render to save page previews under report/build/. The final build checks
 for two portrait content pages and a portrait reference page,
 and has no unresolved citations or overflowing boxes. It copies the verified
-PDF to report/report.pdf. It does not train models or generate figures.
+PDF to report/report.pdf. It does not train models or regenerate figures.
 
 To compile only the LaTeX:
 
@@ -44,7 +44,16 @@ This direct command updates report/build/report.pdf, not report/report.pdf.
 
 scripts/plot_results.py can regenerate the representation figure from
 data/results.json when NumPy, Matplotlib, and Seaborn are installed.
-scripts/plot_tuning.py needs Matplotlib. The other existing model_families
-figure is not used in the paper. The selected GBDT's CV F1 and AIcrowd F1
+scripts/plot_tuning.py uses Seaborn and Matplotlib. To regenerate it:
+
+    uv run --no-project --python 3.12 \
+      --with-requirements report/requirements-report.txt \
+      python -B report/scripts/plot_tuning.py
+
+The selected GBDT's CV F1 and AIcrowd F1
 are reported separately; run.py refits that recipe on all labeled rows to
 create test predictions.
+
+The neural-network configuration is recovered from outputs/cv_results.csv
+and implemented in experiments/mlp.py. The final audit and upload steps
+are in ../SUBMISSION.md. Upload report.pdf, not a historical draft.
