@@ -1,0 +1,4 @@
+2026-10-28 19:09:57 jst316 code /home/pgonzale/ML_p1/outputs/code/1028-190955-1266709: p1 cv gbdt_tuned --set name=e02_m0 --set seed=43 --set model.learning_rate=0.02 --set model.n_trees=1800 --set model.seed=0 --fold 2
+e02_m0:
+  fold 3/5: F1 0.4490, AUC 0.8722 (548 s)
+2026-10-28 19:19:06 done

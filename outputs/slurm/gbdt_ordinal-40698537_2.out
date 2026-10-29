@@ -1,0 +1,4 @@
+2026-10-28 15:31:57 jst299 code /home/pgonzale/ML_p1/outputs/code/1028-153153-3155147: p1 cv configs/gbdt.toml --set name=gbdt_ordinal --set model.categorical=[] --fold 2
+gbdt_ordinal:
+  fold 3/5: F1 0.4260, AUC 0.8661 (1148 s)
+2026-10-28 15:51:07 done

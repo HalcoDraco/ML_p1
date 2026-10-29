@@ -1,0 +1,4 @@
+2026-10-28 15:31:15 jst294 code /home/pgonzale/ML_p1/outputs/code/1028-153114-3154577: p1 cv step2/logistic --set seed=44 --fold 0
+logistic:
+  fold 1/5: F1 0.4525, AUC 0.8710 (120 s)
+2026-10-28 15:33:17 done

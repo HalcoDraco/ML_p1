@@ -1,0 +1,4 @@
+2026-10-28 15:31:54 jst298 code /home/pgonzale/ML_p1/outputs/code/1028-153153-3155124: p1 cv configs/gbdt.toml --set name=gbdt_bins255 --set model.max_bins=255 --fold 0
+gbdt_bins255:
+  fold 1/5: F1 0.4113, AUC 0.8596 (1460 s)
+2026-10-28 15:56:21 done

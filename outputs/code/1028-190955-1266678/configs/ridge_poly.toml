@@ -1,0 +1,9 @@
+transforms = ["impute_median", { name = "poly", degree = 2 }, "standardize"]
+
+[model]
+name = "ridge"
+lambda_ = 1e-3
+
+[grid]  # used by `cv` only: every combination is evaluated
+"model.lambda_" = [1e-4, 1e-3, 1e-2]
+"transforms.poly.degree" = [1, 2]

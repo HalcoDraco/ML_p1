@@ -1,0 +1,4 @@
+fitted gbdt_tuned ['model.seed=1'] in 151 s
+fitted gbdt_tuned ['model.seed=0'] in 152 s
+fitted gbdt_tuned ['model.seed=2'] in 152 s
+wrote /home/pgonzale/ML_p1/outputs/submissions/best.csv: 12.94% of the test rows predicted positive; 238 of the 238 that answered HAREHAB1 predicted 1

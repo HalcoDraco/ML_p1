@@ -1,0 +1,12 @@
+# Final model, used by run.py: do not edit after submitting.
+# A bag of three GBDTs (configs/gbdt_tuned.toml with model seeds 0, 1, 2), each
+# refitted on all training rows; their logits are averaged with equal weights.
+# The threshold is the F1-optimal one on the bag's pooled out-of-fold scores
+# (3 fold seeds x 5 folds), from `uv run p1 submit fc_bag`.
+members = [
+    { preset = "gbdt_tuned", set = ["model.seed=0"] },
+    { preset = "gbdt_tuned", set = ["model.seed=1"] },
+    { preset = "gbdt_tuned", set = ["model.seed=2"] },
+]
+weights = [1, 1, 1]
+threshold = 0.2166

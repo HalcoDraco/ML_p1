@@ -1,0 +1,4 @@
+2026-10-28 15:36:48 jst294 code /home/pgonzale/ML_p1/outputs/code/1028-153647-3229419: p1 cv configs/gbdt.toml --set name=gbdt_lrinit --set model.init=step2/logistic --set model.n_trees=1000 --fold 1
+gbdt_lrinit:
+  fold 2/5: F1 0.4267, AUC 0.8616 (617 s)
+2026-10-28 15:47:08 done

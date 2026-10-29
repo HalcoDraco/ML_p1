@@ -1,0 +1,4 @@
+2026-10-28 15:31:57 jst299 code /home/pgonzale/ML_p1/outputs/code/1028-153154-3155169: p1 cv configs/gbdt.toml --set name=gbdt_d1 --set model.depth=1 --set model.learning_rate=0.2 --fold 1
+gbdt_d1:
+  fold 2/5: F1 0.4382, AUC 0.8629 (740 s)
+2026-10-28 15:44:18 done

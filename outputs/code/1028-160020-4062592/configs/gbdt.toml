@@ -1,0 +1,16 @@
+# Histogram GBDT (p1/gbdt.py) on the clean features. No transforms: the trees
+# bin every feature themselves, with a bin of its own for the missing values.
+transforms = []
+
+[model]
+name = "gbdt"
+categorical = "categorical"  # every feature not in cleaning.NUMERIC
+n_trees = 2000
+learning_rate = 0.05
+depth = 5
+lambda_ = 1.0
+min_child_hessian = 5.0
+row_fraction = 0.7
+feature_fraction = 0.6
+max_bins = 64
+seed = 0

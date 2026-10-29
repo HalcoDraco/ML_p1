@@ -5,7 +5,7 @@ __pycache__/
 github_workdir/
 data/raw/*.csv
 data/processed/
-outputs/
+outputs/oof/
 report/*.aux
 report/*.bbl
 report/*.blg

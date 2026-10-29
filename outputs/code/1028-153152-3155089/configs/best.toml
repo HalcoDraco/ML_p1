@@ -1,0 +1,5 @@
+# Preset of the best AIcrowd submission, used by run.py: do not edit after submitting.
+transforms = ["impute_median", "standardize"]
+
+[model]
+name = "least_squares"

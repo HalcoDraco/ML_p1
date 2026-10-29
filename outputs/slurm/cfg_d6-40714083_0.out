@@ -1,0 +1,4 @@
+2026-10-28 19:09:56 jst314 code /home/pgonzale/ML_p1/outputs/code/1028-190955-1266678: p1 cv gbdt_tuned --set name=cfg_d6 --set seed=42 --set model.depth=6 --set model.n_trees=500 --set model.seed=4 --fold 0
+cfg_d6:
+  fold 1/5: F1 0.4437, AUC 0.8687 (182 s)
+2026-10-28 19:13:00 done

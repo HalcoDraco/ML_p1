@@ -1,0 +1,4 @@
+2026-10-28 19:09:57 jst319 code /home/pgonzale/ML_p1/outputs/code/1028-190956-1266759: p1 cv gbdt_tuned --set name=cfg_ff02 --set seed=43 --set model.feature_fraction=0.2 --set model.n_trees=700 --set model.seed=5 --fold 2
+cfg_ff02:
+  fold 3/5: F1 0.4492, AUC 0.8717 (167 s)
+2026-10-28 19:12:46 done

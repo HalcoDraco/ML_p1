@@ -1,0 +1,4 @@
+transforms = ["impute_median", "standardize"]
+
+[model]
+name = "least_squares"

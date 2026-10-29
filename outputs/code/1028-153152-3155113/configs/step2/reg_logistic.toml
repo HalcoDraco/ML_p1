@@ -1,0 +1,14 @@
+# Encoding shared by the six step-2 presets: the numeric features get their
+# missing values filled with the median plus a 0/1 "was missing" column, the
+# categorical ones become one 0/1 column per frequent answer (NaN included).
+transforms = [
+    { name = "impute_median", columns = "numeric", indicators = true },
+    { name = "onehot", columns = "categorical" },
+    "standardize",
+]
+
+[model]
+name = "reg_logistic"
+lambda_ = 1e-3
+max_iters = 300
+gamma = 0.1

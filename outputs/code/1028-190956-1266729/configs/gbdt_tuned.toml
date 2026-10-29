@@ -1,0 +1,18 @@
+# The GBDT of the final model, tuned by 5-fold CV (README, "Part 3: GBDT"):
+# ordinal splits on every feature (the sorted categorical splits overfit),
+# 30% of the features per tree, λ = 10, and 550 trees, inside the flat optimum
+# (500-900) of the validation log-loss at learning rate 0.05.
+transforms = []
+
+[model]
+name = "gbdt"
+categorical = []  # every feature split in the order of its values (codes)
+n_trees = 550
+learning_rate = 0.05
+depth = 5
+lambda_ = 10.0
+min_child_hessian = 5.0
+row_fraction = 0.7
+feature_fraction = 0.3
+max_bins = 64
+seed = 0

@@ -1,0 +1,4 @@
+2026-10-28 15:31:54 jst299 code /home/pgonzale/ML_p1/outputs/code/1028-153153-3155136: p1 cv configs/gbdt.toml --set name=gbdt_cs50 --set model.cat_smooth=50 --fold 2
+gbdt_cs50:
+  fold 3/5: F1 0.4048, AUC 0.8607 (999 s)
+2026-10-28 15:48:36 done

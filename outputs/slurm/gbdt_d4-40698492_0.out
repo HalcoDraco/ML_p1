@@ -1,0 +1,4 @@
+2026-10-28 15:31:54 jst295 code /home/pgonzale/ML_p1/outputs/code/1028-153151-3155040: p1 cv configs/gbdt.toml --set name=gbdt_d4 --set model.depth=4 --fold 0
+gbdt_d4:
+  fold 1/5: F1 0.4296, AUC 0.8631 (1132 s)
+2026-10-28 15:50:48 done

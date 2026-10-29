@@ -1,0 +1,4 @@
+2026-10-28 16:00:22 jst299 code /home/pgonzale/ML_p1/outputs/code/1028-160021-4063219: p1 cv configs/gbdt.toml --set name=fc_m1 --set seed=44 --set model.categorical=[] --set model.feature_fraction=0.3 --set model.lambda_=10 --set model.n_trees=550 --set model.seed=1 --fold 1
+fc_m1:
+  fold 2/5: F1 0.4466, AUC 0.8679 (200 s)
+2026-10-28 16:03:44 done

@@ -1,0 +1,4 @@
+2026-10-28 16:00:22 jst298 code /home/pgonzale/ML_p1/outputs/code/1028-160019-4062020: p1 cv configs/gbdt.toml --set name=g2_o_ff03_l10_d6 --set seed=42 --set model.categorical=[] --set model.feature_fraction=0.3 --set model.lambda_=10 --set model.depth=6 --set model.n_trees=800 --fold 4
+g2_o_ff03_l10_d6:
+  fold 5/5: F1 0.4358, AUC 0.8699 (296 s)
+2026-10-28 16:05:20 done

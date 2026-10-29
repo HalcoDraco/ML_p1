@@ -1,0 +1,4 @@
+2026-10-28 15:31:51 jst294 code /home/pgonzale/ML_p1/outputs/code/1028-153150-3155018: p1 cv configs/gbdt.toml --set name=gbdt --fold 4
+gbdt:
+  fold 5/5: F1 0.4143, AUC 0.8621 (900 s)
+2026-10-28 15:46:53 done

@@ -1,0 +1,4 @@
+2026-10-28 15:31:54 jst298 code /home/pgonzale/ML_p1/outputs/code/1028-153152-3155089: p1 cv configs/gbdt.toml --set name=gbdt_l10 --set model.lambda_=10 --fold 3
+gbdt_l10:
+  fold 4/5: F1 0.4216, AUC 0.8659 (1274 s)
+2026-10-28 15:53:15 done

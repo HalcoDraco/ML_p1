@@ -1,0 +1,4 @@
+2026-10-28 15:31:54 jst298 code /home/pgonzale/ML_p1/outputs/code/1028-153151-3155077: p1 cv configs/gbdt.toml --set name=gbdt_mch50 --set model.min_child_hessian=50 --fold 2
+gbdt_mch50:
+  fold 3/5: F1 0.4107, AUC 0.8616 (1248 s)
+2026-10-28 15:52:49 done

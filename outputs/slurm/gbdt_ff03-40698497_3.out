@@ -1,0 +1,4 @@
+2026-10-28 15:31:54 jst298 code /home/pgonzale/ML_p1/outputs/code/1028-153152-3155102: p1 cv configs/gbdt.toml --set name=gbdt_ff03 --set model.feature_fraction=0.3 --fold 3
+gbdt_ff03:
+  fold 4/5: F1 0.4290, AUC 0.8684 (800 s)
+2026-10-28 15:45:22 done

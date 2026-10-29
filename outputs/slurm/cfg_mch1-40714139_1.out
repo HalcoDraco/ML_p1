@@ -1,0 +1,4 @@
+2026-10-28 19:10:00 jst051 code /home/pgonzale/ML_p1/outputs/code/1028-190958-1266848: p1 cv gbdt_tuned --set name=cfg_mch1 --set seed=44 --set model.min_child_hessian=1 --set model.n_trees=600 --set model.seed=6 --fold 1
+cfg_mch1:
+  fold 2/5: F1 0.4457, AUC 0.8680 (152 s)
+2026-10-28 19:12:34 done

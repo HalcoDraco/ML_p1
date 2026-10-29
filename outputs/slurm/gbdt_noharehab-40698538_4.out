@@ -1,0 +1,4 @@
+2026-10-28 15:31:57 jst299 code /home/pgonzale/ML_p1/outputs/code/1028-153154-3155158: p1 cv configs/gbdt.toml --set name=gbdt_noharehab --set drop=["HAREHAB1"] --fold 4
+gbdt_noharehab:
+  fold 5/5: F1 0.4003, AUC 0.8591 (1197 s)
+2026-10-28 15:51:56 done
