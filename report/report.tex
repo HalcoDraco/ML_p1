@@ -1,320 +1,188 @@
 \documentclass[10pt,conference,compsocconf]{IEEEtran}
-
-\usepackage{hyperref}
-\usepackage{graphicx}	% For figure environment
-
+\usepackage[T1]{fontenc}
+\usepackage{newtxtext,newtxmath}
+\usepackage{microtype}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage[hidelinks]{hyperref}
+\input{metadata}
+\hypersetup{pdftitle={Numerical Optimization and Nonlinear Models for Heart-Disease Classification},pdfauthor={\paperpdfauthors}}
+\graphicspath{{figures/}}
+\hyphenation{op-ti-mi-za-tion reg-u-lar-i-za-tion ques-tion-naire}
 
 \begin{document}
-\title{Writing Scientific Papers and Software}
-
-\author{
-  Cheng Soon Ong\\
-  \textit{Department of Computer Science, ETH Zurich, Switzerland}
-}
-
+\title{Numerical Optimization and Nonlinear Models\\
+for Heart-Disease Classification}
+\author{\paperauthors\\\paperaffiliation\\\papercontact}
 \maketitle
 
 \begin{abstract}
-  A critical part of scientific discovery is the
-  communication of research findings to peers or the general public.
-  Mastery of the process of scientific communication improves the
-  visibility and impact of research. While this guide is a necessary
-  tool for learning how to write in a manner suitable for publication
-  at a scientific venue, it is by no means sufficient, on its own, to
-  make its reader an accomplished writer. 
-  This guide should be a starting point for further development of 
-  writing skills.
+We study how data representation, numerical optimization, and model capacity
+affect heart-disease classification in BRFSS survey responses. Under a
+NumPy-only modeling constraint, we implement six linear and logistic methods,
+investigate neural networks, and extend the comparison to gradient-boosted
+trees. Encoding categories and missingness yields a strong logistic baseline;
+greater neural capacity provides limited gains. Repeated cross-validation
+favors boosted trees, while engineered features produce the highest recorded
+F1 of 0.4474. We distinguish these local comparisons from the team's reported
+public competition F1 of 0.456.
 \end{abstract}
 
-\section{Introduction}
+\section{Problem and Data Representation}
+Our task is to classify self-reported coronary heart disease or myocardial
+infarction (\texttt{\_MICHD}) from the 2015 Behavioral Risk Factor Surveillance
+System (BRFSS)~\cite{cdc2015}. The course release contains 328,135 labeled
+respondents, 109,379 test respondents, and 321 predictors. Only 8.83\% of
+training labels are positive: predicting every respondent negative already
+gives 91.17\% accuracy, but zero positive-class F1. We therefore prioritize F1
+and use ROC AUC as a threshold-independent ranking measure.
 
-The aim of writing a paper is to infect the mind of your reader with
-the brilliance of your idea~\cite{jones08}. 
-The hope is that after reading your
-paper, the audience will be convinced to try out your idea. In other
-words, it is the medium to transport the idea from your head to your
-reader's head. 
-In the following
-section, we show a common structure of scientific papers and briefly
-outline some tips for writing good papers in
-Section~\ref{sec:tips-writing}.
+\paragraph{Preserving questionnaire semantics}
+Almost 45\% of entries are missing, often because a question is inapplicable
+or belongs to an optional module. Numeric codes are not necessarily
+quantities: \texttt{PHYSHLTH}=88 means zero days of poor physical health,
+whereas 77 and 99 mean unknown and refused. Codebook-based rules remove
+14 survey-design fields, two exact copies, and 14 mixed-unit fields with
+computed replacements. We convert units and fill implied numeric skips,
+leaving 56 numeric and 235 categorical predictors. Categorical unknown and
+refused answers retain their identities.
 
-At that
-point, it is important that the reader is able to reproduce your
-work~\cite{schwab00,wavelab,gentleman05}. This is why it is also
-important that if the work has a computational component, the software
-associated with producing the results are also made available in a
-useful form. Several guidelines for making your user's experience with
-your software as painless as possible is given in
-Section~\ref{sec:tips-software}.
+\paragraph{A representation suited to linear models}
+Numeric variables receive training-median imputation and missingness
+indicators. Categorical levels observed at least 30 times are one-hot encoded,
+with a separate missing category; rare or unseen levels map to all zeros.
+Standardization yields approximately 1,530 columns. All learned statistics
+are fitted within each training fold. Figure~\ref{fig:representation}
+illustrates the importance of encoding; it is an exploratory diagnostic,
+not the repeated-CV comparison below.
 
-This brief guide is by no means sufficient, on its own, to
-make its reader an accomplished writer. The reader is urged to use the
-references to further improve his or her writing skills.
-
-\section{The Structure of a Paper}
-\label{sec:structure-paper}
-
-Scientific papers usually begin with the description of the problem,
-justifying why the problem is interesting. Most importantly, it argues
-that the problem is still unsolved, or that the current solutions are
-unsatisfactory. This leads to the main gist of the paper, which is
-``the idea''. The authors then show evidence, using derivations or
-experiments, that the idea works. Since science does not occur in a
-vacuum, a proper comparison to the current state of the art is often
-part of the results. Following these ideas, papers usually have the
-following structure:
-\begin{description}
-\item[Abstract] \ \\
-  Short description of the whole paper, to help the
-  reader decide whether to read it.
-\item[Introduction] \ \\
-  Describe your problem and state your
-  contributions.
-\item[Models and Methods] \ \\
-  Describe your idea and how it was implemented to solve
-  the problem. Survey the related work, giving credit where credit is
-  due.
-\item[Results] \ \\
-  Show evidence to support your claims made in the
-  introduction.
-\item[Discussion] \ \\
-  Discuss the strengths and weaknesses of your
-  approach, based on the results. Point out the implications of your
-  novel idea on the application concerned.
-\item[Summary] \ \\
-  Summarize your contributions in light of the new
-  results.
-\end{description}
-
-
-\section{Tips for Good Writing}
-\label{sec:tips-writing}
-
-The ideas for good writing have come
-from~\cite{editor10,jones08,anderson04}.
-
-\subsection{Getting Help}
-One should try to get a draft read by as many friendly people as
-possible. And remember to treat your test readers with respect. If
-they are unable to understand something in your paper, then it is
-highly likely that your reviewers will not understand it
-either. Therefore, do not be defensive about the criticisms you get,
-but use it as an opportunity to improve the paper. Before your submit
-your friends to the pain of reading your draft, please \emph{use a
-  spell checker}.
-
-\subsection{Abstract}
-The abstract should really be written last, along with the title of
-the paper. The four points that should be covered~\cite{jones08}:
-\begin{enumerate}
-\item State the problem.
-\item Say why it is an interesting problem.
-\item Say what your solution achieves.
-\item Say what follows from your solution.
-\end{enumerate}
-
-\subsection{Figures and Tables}
-
-\begin{figure}[tbp]
+\begin{figure}[t]
   \centering
-  \includegraphics[width=\columnwidth]{denoised_signal_1d}
-  \caption{Signal compression and denoising using the Fourier basis.}
-  \vspace{-3mm}
-  \label{fig:denoise-fourier}
-\end{figure}
-\begin{figure}[htbp]
-  \centering
-  \includegraphics[width=\columnwidth]{local_wdenoised_1d}
-  \vspace{-3mm}
-  \caption{Signal compression and denoising using the Daubechies wavelet basis.}
-  \label{fig:denoise-wavelet}
+  \includegraphics[width=\columnwidth]{representation.pdf}
+  \caption{Exploratory logistic-regression ablation on one 80/20 split.
+  F1 uses a validation-optimized threshold and is optimistic. Recoding also
+  removes survey-design fields and maps categorical unknowns to missing;
+  the final pipeline instead retains these categorical codes.}
+  \label{fig:representation}
 \end{figure}
 
-Use examples and illustrations to clarify ideas and results. For
-example, by comparing Figure~\ref{fig:denoise-fourier} and
-Figure~\ref{fig:denoise-wavelet}, we can see the two different
-situations where Fourier and wavelet basis perform well. 
+\section{Numerical Methods and Model Capacity}\label{sec:methods}
+\paragraph{Objectives and optimization}
+For a design matrix $X$ including an intercept, labels $y\in\{0,1\}^N$,
+and scores $z=Xw$, we minimize
+\begin{align}
+  L_{\mathrm{MSE}}(w)&=\frac{\lVert Xw-y\rVert_2^2}{2N},\\
+  L_{\mathrm{log}}(w)&=\frac{1}{N}\sum_{i=1}^{N}
+  \bigl[\log(1+e^{z_i})-y_i z_i\bigr].
+\end{align}
+Ridge and regularized logistic regression add $\lambda\lVert w\rVert_2^2$;
+gradient descent (GD) updates $w\leftarrow w-\gamma\nabla L(w)$.
+We compare MSE GD, single-sample stochastic GD (SGD), least squares, ridge,
+logistic GD, and regularized logistic GD, all implemented in NumPy.
 
-\subsection{Models and Methods}
-The models and methods
-section should describe what was
-done to answer the research question, describe how it was done,
-justify the experimental design, and
-explain how the results were analyzed.
+\paragraph{Conditioning and numerical stability}
+One-hot dependencies make $X^\top X$ singular; least squares uses a
+pseudoinverse and ridge solves $(X^\top X+2N\lambda I)w=X^\top y$.
+The measured $\lambda_{\max}(X^\top X/N)\simeq63.3$ gives MSE GD's
+stability condition $\gamma<2/63.3$. We use $\gamma=0.02$ for 100 steps,
+and $\gamma=0.1$ for 300 logistic steps. SGD takes $10^6$ single-sample
+updates at $\gamma=5\cdot10^{-6}$; rare standardized categories produce
+large row norms. Both regularized presets use $\lambda=10^{-3}$.
+Stable \texttt{logaddexp} evaluates logistic loss. MSE solvers share a
+hypothesis class; finite budgets affect their numerical solutions.
 
-The model refers to the underlying mathematical model or structure which 
-you use to describe your problem, or that your solution is based on. 
-The methods on the other hand, are the algorithms used to solve the problem. 
-In some cases, the suggested method directly solves the problem, without having it 
-stated in terms of an underlying model. Generally though it is a better practice to have 
-the model figured out and stated clearly, rather than presenting a method without specifying 
-the model. In this case, the method can be more easily evaluated in the task of fitting 
-the given data to the underlying model.
+\paragraph{Neural networks as a capacity test}
+Exploratory multilayer perceptrons (MLPs) use one hidden ReLU layer, Adam
+optimization~\cite{kingma2015adam}, and validation-based early stopping.
+Widths 64 and 256 achieve holdout F1 of 0.4341 and 0.4402; the latter uses
+dropout 0.3~\cite{srivastava2014dropout}. Reported overfitting after one to two
+epochs motivates regularization rather than unbounded expansion. A later MLP
+achieves repeated-CV F1 of 0.4399. These experiments test whether learned
+nonlinear interactions improve on a well-encoded additive classifier;
+the observed gains are limited.
 
-The methods part of this section, is not a step-by-step, directive,
-protocol as you might see in your lab manual, but detailed enough such
-that an interested reader can reproduce your
-work~\cite{anderson04,wavelab}.
+\paragraph{A nonlinear extension with explicit interactions}
+Motivated by gradient boosting~\cite{chen2016xgboost,ke2017lightgbm}, we implement
+histogram trees in NumPy, with learned missing-value routing. A tuned ensemble
+uses depth 5, 550 trees, learning rate 0.05, 64 bins, leaf penalty 10,
+and row/feature fractions 0.7/0.3, averaging logits from model seeds 0--2.
+A later variant uses 2,000 trees at rate 0.02 and adds eight response-count
+features plus categorical target-rate encoding, smoothed with 50 pseudo-rows
+at the training prevalence. Target statistics are learned only on training
+folds. The five-member feature ensemble combines three seeds with two
+additional variants: feature fraction 0.2 and minimum child Hessian 1.
 
-The methods section of a research paper provides the information by
-which a study's validity is judged.
-Therefore, it requires a clear and precise description of how an
-experiment was done, and the rationale
-for why specific experimental procedures were chosen.
-It is usually helpful to
-structure the methods section by~\cite{kallet04methods}:
-\begin{enumerate}
-\item Layout the model you used to describe the problem or the solution.
-\item Describing the algorithms used in the study, briefly including
-  details such as hyperparameter values (e.g. thresholds), and
-  preprocessing steps (e.g. normalizing the data to have mean value of
-  zero).
-\item Explaining how the materials were prepared, for example the
-  images used and their resolution.
-\item Describing the research protocol, for example which examples
-  were used for estimating the parameters (training) and which were
-  used for computing performance.
-\item Explaining how measurements were made and what
-  calculations were performed. Do not reproduce the full source code in
-  the paper, but explain the key steps.
-\end{enumerate}
+\section{Evaluation and Results}
+\paragraph{Protocol and decision threshold}
+Table~\ref{tab:numerical} compares the six required methods on the same five
+shuffled folds (seed 42), with thresholds optimized on each model's training
+scores. The advanced comparison uses split seeds 42--44, five folds each;
+each scored fold takes its threshold from the other folds' out-of-fold
+predictions. Thresholds around 0.20--0.24 outperform the default 0.5 in this
+imbalanced task. Hyperparameters and blend weights are selected using these
+validation data, so this is not fully nested model-selection CV.
 
-\subsection{Results}
-
-Organize the results section based on the sequence of table and
-figures you include. Prepare the tables and figures as soon as all
-the data are analyzed and arrange them in the sequence that best
-presents your findings in a logical way. A good strategy is to note,
-on a draft of each table or figure, the one or two key results you
-want to address in the text portion of the results.
-The information from the figures is
-summarized in Table~\ref{tab:fourier-wavelet}.
-
-\begin{table*}[htbp]
+\begin{table}[t]
+  \caption{Five-fold comparison of numerical methods. All rows except
+  ``Raw inputs'' share the encoded design. Spread is fold standard deviation,
+  not a confidence interval.}
+  \label{tab:numerical}
   \centering
-  \begin{tabular}[c]{|l||l|l|l|}
-    \hline
-    Basis&Support&Suitable signals&Unsuitable signals\\
-    \hline
-    Fourier&global&sine like&localized\\
-    wavelet&local&localized&sine like\\
-    \hline
-  \end{tabular}
-  \caption{Characteristics of Fourier and wavelet basis.}
-  \label{tab:fourier-wavelet}
-\end{table*}
+  \small
+  \setlength{\tabcolsep}{5pt}
+  \input{generated/baseline_table}
+\end{table}
 
-When reporting computational or measurement results, always
-report the mean (average value) along with a measure of variability
-(standard deviation(s) or standard error of the mean).
+\paragraph{Representation and loss matter before complexity}
+For least squares, encoding increases F1 from 0.4095 to 0.4301.
+Logistic GD reaches 0.4390 and improves on least squares on every fold;
+the tested L2 penalty adds no benefit. The exploratory encoding sequence
+in Fig.~\ref{fig:representation} supports preserving missingness and categories.
+However, once one-hot encoding is present, numeric cleaning alone changes
+paired five-fold F1 by only $-0.0003$; its semantic correctness should not be
+confused with a measurable incremental gain.
 
+\begin{figure}[t]
+  \centering
+  \includegraphics[width=\columnwidth]{model_families.pdf}
+  \caption{Recorded means over 15 validation folds, with thresholds selected
+  from other folds' OOF scores. Points are selected configurations; no error
+  bars are inferred from unavailable fold records. The later MLP is a
+  separate experiment from the exploratory networks in Section~\ref{sec:methods}.}
+  \label{fig:families}
+\end{figure}
 
-\section{Tips for Good Software}
-\label{sec:tips-software}
+\paragraph{Nonlinearity helps; the final increments are uncertain}
+In the repeated comparison, logistic regression reaches 0.4386, the MLP
+0.4399, and the tuned tree ensemble 0.4462 (AUC 0.8703).
+The recorded Nadeau--Bengio corrected paired comparison~\cite{nadeau2003inference}
+estimates a tree--logistic F1 gain of 0.0077, with a 95\% interval
+$[0.0038,0.0115]$. Adding the MLP to the trees reaches 0.4469;
+engineered features and ensembling reach 0.4474
+(Fig.~\ref{fig:families}). The latter gain is only about 0.0011 over the
+tuned ensemble (corrected $t=1.51$). These selected-model comparisons
+support the larger tree gain more strongly than the final refinements;
+they do not account for the full model search. The team's best reported
+public AIcrowd F1 is 0.456, kept separate from the local CV results.
 
-There is a lot of literature (for example~\cite{hunt99pragmatic} and
-\cite{spolsky04software}) on how to write software. It is not the
-intention of this section to replace software engineering
-courses. However, in the interests of reproducible
-research~\cite{schwab00}, there are a few guidelines to make your
-reader happy:
-\begin{itemize}
-\item Have a \texttt{README} file that (at least) describes what your
-  software does, and which commands to run to obtain results. Also
-  mention anything special that needs to be set up, such as
-  toolboxes\footnote{For those who are
-  particularly interested, other common structures can be found at
-  \url{http://en.wikipedia.org/wiki/README} and
-  \url{http://www.gnu.org/software/womb/gnits/}.}.
-\item A list of authors and contributors can be included in a file
-  called \texttt{AUTHORS}, acknowledging any help that you may have
-  obtained. For small projects, this information is often also
-  included in the \texttt{README}.
-\item Use meaningful filenames, and not \texttt{temp1.py},
-  \texttt{temp2.py}. 
-\item Document your code. Each file should at least have a short
-  description about its reason for existence. Non obvious steps in the
-  code should be commented. Functions arguments and return values should be described.
-\item Describe how the results presented in your paper can be reproduced.
-\end{itemize}
+\section{Discussion and Reproducibility}
+Our strongest finding is the progression from meaningful representation to
+a well-optimized logistic baseline, then to a nonlinear model with a
+larger measured gain. Extra neural capacity and ensemble diversity do not
+automatically improve generalization. Importantly, all 773 training
+respondents answering \texttt{HAREHAB1} are positive: this post-infarction
+rehabilitation question~\cite{cdc2015} leaks diagnosis information. Retaining
+it aids the benchmark but precludes interpreting the scores as prospective
+clinical prediction.
 
+Executable numerical methods, transforms, and GBDT recipes accompany this
+report. Results come from archived summaries; MLP source and fold artifacts
+are absent from this checkout. The current \texttt{run.py} refits the earlier
+three-member ensemble. Linking the 0.456 submission to its exact configuration
+and verifying identical predictions remain necessary for final reproducibility.
 
-\subsection{\LaTeX{} Primer}
-\label{sec:latex-primer}
-
-\LaTeX{} is one of the most commonly used document preparation systems
-for scientific journals and conferences. It is based on the idea
-that authors should be able to focus on the content of what they are
-writing without being distracted by its visual presentation.
-The source of this file can be used as a starting point for how to use
-the different commands in \LaTeX{}. We are using an IEEE style for
-this course.
-
-\subsubsection{Installation}
-
-There are various different packages available for processing \LaTeX{}
-documents.
-On OSX use Mac\TeX{}
-(\url{http://www.tug.org/mactex/}). On Windows, use for example Mik\TeX{} (\url{http://miktex.org/}).
-
-\subsubsection{Compiling \LaTeX{}}
-Your directory should contain at least~4 files, in addition to image
-files. Images should be in \texttt{.png}, \texttt{.jpg} or
-\texttt{.pdf} format.
-\begin{itemize}
-\item IEEEtran.cls
-\item IEEEtran.bst
-\item groupXX-submission.tex
-\item groupXX-literature.bib
-\end{itemize}
-Note that you should replace groupXX with your chosen group name.
-Then, from the command line, type:
-\begin{verbatim}
-$ pdflatex groupXX-submission
-$ bibtex groupXX-literature
-$ pdflatex groupXX-submission
-$ pdflatex groupXX-submission
-\end{verbatim}
-This should give you a PDF document \texttt{groupXX-submission.pdf}.
-
-\subsubsection{Equations}
-
-There are three types of equations available: inline equations, for
-example $y=mx + c$, which appear in the text, unnumbered equations
-$$y=mx + c,$$
-which are presented on a line on its own, and numbered equations
-\begin{equation}
-  \label{eq:linear}
-  y = mx + c
-\end{equation}
-which you can refer to at a later point (Equation~(\ref{eq:linear})).
-
-\subsubsection{Tables and Figures}
-
-Tables and figures are ``floating'' objects, which means that the text
-can flow around it.
-Note
-that \texttt{figure*} and \texttt{table*} cause the corresponding
-figure or table to span both columns.
-
-
-
-\section{Summary}
-
-The aim of a scientific paper is to convey the idea or discovery of
-the researcher to the minds of the readers. The associated software
-package provides the relevant details, which are often only briefly
-explained in the paper, such that the research can be reproduced.
-To write good papers, identify your key idea, make your contributions
-explicit, and use examples and illustrations to describe the problems
-and solutions.
-
-\section*{Acknowledgements}
-The author thanks Christian Sigg for his careful reading and helpful
-suggestions.
-
+\clearpage
+\IEEEtriggeratref{4}
 \bibliographystyle{IEEEtran}
-\bibliography{literature}
-
+\bibliography{references}
 \end{document}
